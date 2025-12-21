@@ -1,6 +1,24 @@
+"""
+bloodhound/app.py
+
+Orchestration entrypoint for Bloodhound v2.
+
+Primary responsibilities:
+- Load env config (via `config.py`)
+- Scan resources (via `scanner/*`)
+- Split candidates vs whitelisted/kept (via `whitelist.py`)
+- Post Slack reports (via `messages.py` + `slack.py`)
+- Optionally execute teardown actions (via `teardown/*`)
+
+Used by:
+- `lambda_function.lambda_handler` (AWS Lambda)
+- `run_local.py` (local testing)
+"""
+
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from bloodhound.aws import create_clients
@@ -27,12 +45,29 @@ def run(event: Any, context: Any) -> dict[str, Any]:
     Main orchestration entrypoint for Lambda and local testing.
     Returns a small JSON-serializable summary for `aws lambda invoke`.
     """
+    # Slack slash command worker mode:
+    # apply teardown overrides FIRST, then load config so the same invocation uses the intended flags.
+    if isinstance(event, dict) and event.get("source") == "slack_command":
+        mode = (event.get("mode") or "").strip()
+        # /seek = scan + reports only
+        if mode == "seek":
+            os.environ["APPLY_CHANGES"] = "false"
+            os.environ["TEARDOWN_SIMULATE"] = "true"
+            os.environ["TEARDOWN_ALLOW_ALL"] = "false"
+        # /seek_destroy = destructive mode (delete all non-whitelisted candidates)
+        elif mode == "seek_destroy":
+            os.environ["APPLY_CHANGES"] = "true"
+            os.environ["TEARDOWN_SIMULATE"] = "false"
+            os.environ["TEARDOWN_ALLOW_ALL"] = "true"
+
+    # Load configuration from env/.env and validate required fields.
     cfg = load_config()
     errors = validate_config(cfg)
     if errors:
         # Still return a structured error for Lambda invocations.
         return {"ok": False, "errors": errors}
 
+    # AWS session/clients (Lambda uses its execution role; local can use AWS_PROFILE).
     clients = create_clients(profile=cfg.aws.profile)
     slack = None
     if cfg.slack.enabled:
@@ -53,6 +88,7 @@ def run(event: Any, context: Any) -> dict[str, Any]:
     kept_by_region: dict[str, list] = {}
 
     for region, records in raw_by_region.items():
+        # Whitelist is applied before teardown planning.
         candidates, kept = filter_whitelisted(records, cfg.whitelist)
         candidates_by_region[region] = candidates
         kept_by_region[region] = kept

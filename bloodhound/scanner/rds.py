@@ -1,3 +1,9 @@
+"""
+bloodhound/scanner/rds.py
+
+RDS scanner. Collects DB instances and best-effort tags (requires list_tags_for_resource).
+"""
+
 from __future__ import annotations
 
 from typing import Any

@@ -1,0 +1,42 @@
+# Example Terraform inputs for Bloodhound v2.
+#
+# Copy to terraform.tfvars (do not commit terraform.tfvars; it's gitignored).
+#
+# NOTE: Any values you put in lambda_env will end up in Terraform state.
+# Avoid putting Slack tokens or secrets here. Prefer setting secrets in the Lambda console
+# or via your preferred secret management approach.
+
+aws_region  = "us-east-1"
+aws_profile = "geekstar"
+
+name_prefix          = "bloodhound-v2"
+lambda_function_name = "BloodhoundLambdaV2"
+lambda_runtime       = "python3.10"
+
+# Non-secret env vars can live here safely.
+lambda_env = {
+  SLACK_ENABLED           = "true"
+  # Secrets (OK to set here if you accept they will be stored in Terraform state)
+  SLACK_BOT_TOKEN         = "REPLACE_ME"
+  SLACK_SIGNING_SECRET    = "REPLACE_ME"
+
+  SLACK_SCAN_CHANNEL_ID   = "C0A4YLV0HNY"
+  SLACK_ALERT_CHANNEL_ID  = "C0A4YLV0HNY"
+  REGION_MODE             = "explicit"
+  REGIONS                 = "us-east-1,us-east-2,us-west-1,us-west-2"
+  KEEP_TAG_KEY            = "bloodhound:keep"
+  KEEP_TAG_VALUE          = "true"
+  COHORT_START_YYYY_MM    = "2025-12"
+  COHORT_TOTAL_BUDGET_USD = "3000"
+  COHORT_LENGTH_MONTHS    = "7"
+  BUDGET_OVER_DAYS        = "2"
+
+  # Slash commands (non-secret)
+  SLACK_DESTROY_CONFIRM_TOKEN = "CONFIRM"
+
+  # Optional allowlists (comma-separated)
+  SLACK_ALLOWED_USER_IDS    = ""
+  SLACK_ALLOWED_CHANNEL_IDS = ""
+}
+
+

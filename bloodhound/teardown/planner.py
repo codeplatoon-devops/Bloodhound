@@ -1,3 +1,10 @@
+"""
+bloodhound/teardown/planner.py
+
+Builds a teardown action plan from candidate ResourceRecords.
+This is used for both dry-run reporting and apply-mode execution.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

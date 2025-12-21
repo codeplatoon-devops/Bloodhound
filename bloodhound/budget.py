@@ -1,3 +1,14 @@
+"""
+bloodhound/budget.py
+
+Budget/projection logic for Bloodhound v2.
+
+Uses Cost Explorer (CE) to compute:
+- cohort-to-date spend
+- dynamic monthly allowance based on remaining budget/months
+- simple month-end projection from daily spend run-rate
+"""
+
 from __future__ import annotations
 
 import calendar
@@ -38,13 +49,15 @@ def compute_budget_snapshot(
     start_year, start_month = _parse_yyyy_mm(cohort_start_yyyy_mm)
     cohort_start = date(start_year, start_month, 1)
 
-    # Cost Explorer is effectively "global"; us-east-1 is the common choice.
+    # Cost Explorer is effectively "global"; us-east-1 is the common boto3 convention.
     ce = clients.client("ce", region="us-east-1")
 
-    # Cohort-to-date monthly spend
+    # Cohort-to-date spend (monthly granularity).
     cohort_to_date = _get_cost_monthly_total(ce, start=cohort_start, end=today + timedelta(days=1))
 
-    # Current month daily spend for MTD + "over budget X days" streak computation
+    # Current month daily spend for:
+    # - month-to-date spend
+    # - "over budget X days" calculation without needing a database
     month_start = date(today.year, today.month, 1)
     daily_costs = _get_cost_daily(ce, start=month_start, end=today + timedelta(days=1))
     mtd_spend = sum(daily_costs.values())
@@ -53,6 +66,7 @@ def compute_budget_snapshot(
     remaining_months = _remaining_months(cohort_start, cohort_length_months, today)
     allowance = remaining_budget / remaining_months if remaining_months > 0 else remaining_budget
 
+    # Run-rate projection: assumes current pace continues to month end.
     projected_month_end = _project_month_end(mtd_spend, today)
     over_met = _over_budget_threshold_met(
         daily_costs=daily_costs,

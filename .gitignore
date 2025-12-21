@@ -37,6 +37,13 @@ Thumbs.db
 # Logs
 *.log
 
+# Terraform
+**/.terraform/
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/terraform.tfvars
+**/terraform.tfvars.json
+
 
 # will add actions folder later but ignore for now we dont want to trigger github actions and destroy aws resources
 /.github/workflows/

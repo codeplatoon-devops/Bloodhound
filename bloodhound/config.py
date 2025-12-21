@@ -1,3 +1,13 @@
+"""
+bloodhound/config.py
+
+Configuration loader for Bloodhound v2.
+
+Reads configuration from environment variables and (for local runs) a `.env` file.
+All non-code “knobs” (channels, regions, whitelist tag, teardown flags, cohort config)
+should live here so the rest of the code stays clean.
+"""
+
 from __future__ import annotations
 
 import os

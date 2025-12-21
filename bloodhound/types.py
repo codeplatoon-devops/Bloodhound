@@ -1,3 +1,10 @@
+"""
+bloodhound/types.py
+
+Shared data structures used across scanners/whitelist/teardown.
+Keeping these centralized avoids “dict soup” across the codebase.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,3 +1,9 @@
+"""
+bloodhound/scanner/scan_all.py
+
+Scan coordinator: runs all per-service scanners for each region and returns a region->records map.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

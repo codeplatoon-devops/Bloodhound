@@ -10,7 +10,10 @@ This README is intentionally focused on the workflow you asked for:
 - Deploy to a **new** AWS Lambda (do not overwrite v1)
 - Configure Lambda env vars to match your `.env`
 
-If you need to create a Slack bot from scratch, see `SLACK_SETUP.md`.
+If you need to create a Slack bot from scratch, see `docs/SLACK_SETUP.md`.
+
+Project docs:
+- v2 plan: `docs/V2_PLAN.md`
 
 ![AWS Architecture Diagram](assets/bloodhound_lambda_architecture.png)
 
@@ -50,7 +53,7 @@ Bloodhound v2 automatically loads `.env` for local runs.
 
 ```bash
 # Choose the AWS profile you want to test with:
-AWS_PROFILE=geekstar .venv/bin/python run_local.py
+AWS_PROFILE=geekstar .venv/bin/python tools/run_local.py
 ```
 
 ---
@@ -86,21 +89,7 @@ Safety rails:
 
 ## Build the Lambda deployment zip (v2)
 
-The `.build/` directory is intentionally not committed. Recreate it locally whenever you deploy.
-
-From this directory:
-
-```bash
-rm -rf .build
-mkdir -p .build/lambda_pkg
-
-python3 -m pip install -r requirements.txt -t .build/lambda_pkg
-rsync -a bloodhound/ .build/lambda_pkg/bloodhound/
-cp lambda_function.py .build/lambda_pkg/
-
-(cd .build/lambda_pkg && zip -qr ../bloodhound_lambda_v2.zip .)
-ls -lh .build/bloodhound_lambda_v2.zip
-```
+The `.build/` directory is intentionally not committed. Terraform will build the zip automatically (see `infra/README.md`).
 
 ---
 
@@ -109,7 +98,7 @@ ls -lh .build/bloodhound_lambda_v2.zip
 Deploy to a new function name so you do not touch your existing v1 Lambda:
 
 - Function name: `BloodhoundLambdaV2`
-- Handler: `lambda_function.lambda_handler`
+- Handler: `handlers.lambda_function.lambda_handler`
 
 ### Configure Lambda environment variables
 
@@ -127,7 +116,7 @@ At minimum:
 ```bash
 aws lambda invoke \
   --function-name BloodhoundLambdaV2 \
-  --payload file://test_event.json \
+  --payload file://tools/test_event.json \
   output.txt \
   --region us-west-2
 
@@ -145,3 +134,19 @@ This repo includes a separate workflow for v2:
 It invokes:
 
 - `BloodhoundLambdaV2`
+
+---
+
+## Slack slash commands (v2)
+
+Slash commands require a publicly reachable HTTPS endpoint. For v2 we recommend a **Lambda Function URL** (one endpoint) and route based on the Slack `command` field.
+
+- `/seek` runs scan + reports (non-destructive)
+- `/seek_destroy CONFIRM` runs destructive mode (deletes all non-whitelisted candidates we scan for)
+
+To enable slash commands you must set these env vars in Lambda:
+
+- `SLACK_SIGNING_SECRET`
+- `SLACK_ALLOWED_USER_IDS` (optional)
+- `SLACK_ALLOWED_CHANNEL_IDS` (optional)
+- `SLACK_DESTROY_CONFIRM_TOKEN` (default `CONFIRM`)

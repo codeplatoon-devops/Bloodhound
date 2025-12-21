@@ -1,9 +1,8 @@
 """
-Local runner for Bloodhound v2.
+tools/run_local.py
 
-Usage:
-  cd Bloodhound
-  python run_local.py
+Local runner for Bloodhound v2 (uses `.env` + your AWS_PROFILE).
+This is the fastest way to validate config + Slack output before deploying to Lambda.
 """
 
 from __future__ import annotations

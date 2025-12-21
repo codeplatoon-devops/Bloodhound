@@ -1,3 +1,12 @@
+"""
+bloodhound/whitelist.py
+
+Whitelist (keep) logic for Bloodhound v2.
+
+Kept resources are excluded from teardown planning/execution.
+Primary rule is a single tag (configurable via KEEP_TAG_KEY/KEEP_TAG_VALUE).
+"""
+
 from __future__ import annotations
 
 from bloodhound.config import WhitelistConfig
@@ -17,6 +26,7 @@ def is_whitelisted(record: ResourceRecord, cfg: WhitelistConfig) -> bool:
     val = record.tags.get(cfg.keep_tag_key)
     if val is None:
         return False
+    # Normalize for "TRUE", "true", etc.
     return val.strip().lower() == cfg.keep_tag_value.strip().lower()
 
 

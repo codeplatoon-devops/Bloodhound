@@ -1,3 +1,9 @@
+"""
+bloodhound/scanner/elbv2.py
+
+ELBv2 scanner (ALB/NLB). Collects load balancers and tags (in batches).
+"""
+
 from __future__ import annotations
 
 from bloodhound.aws import AwsClients

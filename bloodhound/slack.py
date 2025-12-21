@@ -1,3 +1,10 @@
+"""
+bloodhound/slack.py
+
+Small wrapper around the Slack SDK for posting messages.
+The formatting is handled in `messages.py`.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

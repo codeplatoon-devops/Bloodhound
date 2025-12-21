@@ -1,3 +1,10 @@
+"""
+bloodhound/scanner/ec2.py
+
+EC2-family scanners (instances, EBS volumes, EIPs, NAT gateways).
+These produce `ResourceRecord` items which are later whitelisted and optionally torn down.
+"""
+
 from __future__ import annotations
 
 from typing import Any

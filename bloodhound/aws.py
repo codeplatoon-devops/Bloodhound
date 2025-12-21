@@ -1,3 +1,12 @@
+"""
+bloodhound/aws.py
+
+Thin AWS session/client helpers for Bloodhound v2.
+
+In Lambda: credentials come from the execution role.
+Locally: you can use AWS_PROFILE via environment variables.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

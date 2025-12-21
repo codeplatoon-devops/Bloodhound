@@ -1,3 +1,12 @@
+"""
+bloodhound/messages.py
+
+Slack message formatting for Bloodhound v2.
+
+This file contains ONLY formatting/aggregation logic (no AWS calls).
+It is used by `app.py` right before posting via `slack.py`.
+"""
+
 from __future__ import annotations
 
 from collections import defaultdict

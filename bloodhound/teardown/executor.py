@@ -1,3 +1,13 @@
+"""
+bloodhound/teardown/executor.py
+
+Executes teardown actions produced by `planner.py`.
+
+Supports simulate mode (TEARDOWN_SIMULATE):
+- EC2-family actions use DryRun=True where supported
+- non-DryRun services are treated as no-op in simulate mode (safest)
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -32,6 +42,9 @@ def execute_actions(clients: AwsClients, actions: list[PlannedAction], *, simula
     for a in actions:
         attempted += 1
         try:
+            # simulate=True guarantees we do NOT destroy anything:
+            # - EC2-family: validate permissions/shape with DryRun=True
+            # - RDS/ELB deletes: no-op (safest)
             did_simulate = _execute_one(clients, a, simulate=simulate)
             if did_simulate:
                 simulated_count += 1
