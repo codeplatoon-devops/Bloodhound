@@ -13,6 +13,7 @@ This README is intentionally focused on the workflow you asked for:
 If you need to create a Slack bot from scratch, see `docs/SLACK_SETUP.md`.
 
 Project docs:
+
 - v2 plan: `docs/V2_PLAN.md`
 
 ![AWS Architecture Diagram](assets/bloodhound_lambda_architecture.png)
