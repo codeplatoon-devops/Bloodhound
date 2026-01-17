@@ -2,12 +2,9 @@
 
 Bloodhound v2 scans selected AWS regions for common cost-leak resources, posts results to Slack, and can optionally delete resources that are **not** whitelisted.
 
-This README is intentionally focused on the workflow you asked for:
-
 - Clone this repo
 - Configure `.env` for local testing
 - Rebuild the deployment zip locally (the `.build/` dir is not committed)
-- Deploy to a **new** AWS Lambda (do not overwrite v1)
 - Configure Lambda env vars to match your `.env`
 
 If you need to create a Slack bot from scratch, see `docs/SLACK_SETUP.md`.
@@ -16,14 +13,14 @@ Project docs:
 
 - v2 plan: `docs/V2_PLAN.md`
 
-![AWS Architecture Diagram](assets/bloodhound_lambda_architecture.png)
+![AWS Architecture Diagram (v2)](assets/bloodhound_lambda_architecture_v2.svg)
 
 ---
 
 ## Requirements
 
 - Python 3.10+ for local dev (or match your Lambda runtime)
-- AWS CLI configured (use `AWS_PROFILE=...` as needed)
+- AWS CLI configured (use `AWS_PROFILE=...` as needed). To set it up the first time: `aws configure --profile <name>` (or `aws configure` for the default profile). To see what profiles you have: `aws configure list-profiles`; your local config/creds live in `~/.aws/config` and `~/.aws/credentials` (view with `cat ~/.aws/config` and `cat ~/.aws/credentials`).
 - Slack bot token and channel IDs
 
 ---
