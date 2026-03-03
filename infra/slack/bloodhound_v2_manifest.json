@@ -1,0 +1,49 @@
+{
+  "display_information": {
+    "name": "Bloodhound-V2",
+    "description": "AWS resource scanning and teardown automation (V2)",
+    "background_color": "#2E3A59"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Bloodhound-V2",
+      "always_online": false
+    },
+    "slash_commands": [
+      {
+        "command": "/seek",
+        "description": "Scan AWS resources and report back",
+        "usage_hint": "Runs a scan and reports back findings in the channel",
+        "should_escape": false,
+        "url": "https://example.com"
+      },
+      {
+        "command": "/seek_destroy",
+        "description": "Scan & destroy untagged resources",
+        "usage_hint": "CONFIRM",
+        "should_escape": false,
+        "url": "https://example.com"
+      }
+    ]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "chat:write",
+        "commands",
+        "channels:read",
+        "groups:read",
+        "im:read",
+        "mpim:read"
+      ]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false,
+    "interactivity": {
+      "is_enabled": false
+    }
+  }
+}
