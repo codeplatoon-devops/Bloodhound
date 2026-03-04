@@ -8,6 +8,7 @@ Key points:
 - Env vars are provided via var.lambda_env (often sourced from terraform.tfvars)
 */
 
+
 resource "aws_lambda_function" "bloodhound_v2" {
   function_name = var.lambda_function_name
   role          = aws_iam_role.lambda_role.arn
@@ -20,8 +21,17 @@ resource "aws_lambda_function" "bloodhound_v2" {
   timeout     = var.lambda_timeout_seconds
   memory_size = var.lambda_memory_mb
 
+  publish = true
+
   environment {
     variables = var.lambda_env
+  }
+
+  # prevent_destroy is intentionally disabled.
+  # Lambdas are stateless and safe to recreate during deploys.
+  # Enable this only if the function ever manages critical resources.
+  lifecycle {
+    prevent_destroy = false
   }
 }
 

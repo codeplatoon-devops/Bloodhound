@@ -34,8 +34,54 @@ From this directory:
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
+
+# Runtime dependencies (used by Lambda)
 .venv/bin/python -m pip install -r requirements.txt
+
+# Development dependencies (used for local testing)
+.venv/bin/python -m pip install -r requirements-dev.txt
 ```
+### Dependency Management
+
+Bloodhound separates Lambda runtime dependencies from local development
+dependencies. This keeps the Lambda deployment package small and avoids
+dependency conflicts during Terraform builds.
+
+Dependency files:
+
+```md
+
+File                    Purpose
+---------------------   --------------------------------------------------------
+requirements.txt        Dependencies packaged into the Lambda deployment.
+
+requirements-dev.txt    Dependencies used only for local development and
+                        testing. These are not included in the Lambda package.
+```
+
+AWS Lambda already provides several AWS SDK libraries in the runtime
+environment (including boto3 and botocore). Because of this, these libraries
+are not bundled into the Lambda deployment package.
+
+For a detailed explanation of the packaging strategy, see:
+
+`docs/lambda_packaging.md`
+
+AWS Lambda already includes several AWS SDK libraries in the runtime environment, including:
+
+boto3
+
+botocore
+
+s3transfer
+
+jmespath
+
+Because of this, these libraries are not included in the Lambda deployment package, but they may still be installed locally through requirements-dev.txt.
+
+This keeps the Lambda package smaller and avoids dependency conflicts during Terraform builds.
+
+See docs/lambda_packaging.md for a deeper explanation of the packaging strategy.
 
 ### Configure `.env`
 
@@ -45,15 +91,87 @@ Create `.env` from `env.example` and fill it in:
 cp env.example .env
 ```
 
+Then edit `.env` and replace the placeholder values.
+
+At minimum you must configure the following values:
+
+Variable	Source
+- SLACK_BOT_TOKEN	Slack App → OAuth & Permissions → Bot User OAuth Token
+- SLACK_SIGNING_SECRET	Slack App → Basic Information → Signing Secret
+- SLACK_SCAN_CHANNEL_ID	Slack channel ID where scan summaries will post
+- SLACK_ALERT_CHANNEL_ID	Slack channel ID where alerts/teardown notices will post
+
+Example Slack channel link:
+
+https://workspace.slack.com/archives/C000Y0V0HNY
+
+Channel ID:
+
+C000Y0V0HNY
+
+Bloodhound v2 automatically loads .env for local runs.
+
+When deploying to AWS Lambda, these same variables must be configured in:
+
+Lambda → Configuration → Environment Variables
+If you need to create or configure the Slack app, see
+`docs/SLACK_SETUP.md` for the full setup guide.
+### Environment loading
 Bloodhound v2 automatically loads `.env` for local runs.
 
 ### Run locally
 
+From the repository root.
+
+**Recommended (module execution):**
+
+```bash
+AWS_PROFILE=<your_profile> python -m tools.run_local
+```
+
+If your virtual environment is activated:
+
+`AWS_PROFILE=geekstar python -m tools.run_local`
+
+If you prefer using the virtual environment interpreter explicitly:
+
+`AWS_PROFILE=<your_profile> .venv/bin/python -m tools.run_local`
+
+Note:
+The runner must be executed as a module (python -m tools.run_local).
+Running python tools/run_local.py may fail with ModuleNotFoundError
+because the project uses package-relative imports (from bloodhound...).
+
+**Legacy script execution (may work in some environments):**
+
 ```bash
 # Choose the AWS profile you want to test with:
+AWS_PROFILE=<your_profile> .venv/bin/python tools/run_local
 AWS_PROFILE=geekstar .venv/bin/python tools/run_local.py
 ```
 
+AWS Credentials
+
+Bloodhound uses boto3, which follows the standard AWS credential resolution chain.
+
+If AWS_PROFILE is not specified, boto3 will automatically use the default profile from:
+
+`~/.aws/credentials`
+
+You can verify which AWS account your local run will use with:
+
+`aws sts get-caller-identity`
+
+Example output:
+```json
+{
+  "UserId": "...",
+  "Account": "123456789012",
+  "Arn": "arn:aws:iam::123456789012:user/..."
+}
+```
+
+This helps confirm you are scanning the expected AWS account before running Bloodhound.
 ---
 
 ## Whitelisting
@@ -120,6 +238,18 @@ aws lambda invoke \
 
 cat output.txt
 ```
+
+Note:
+
+The AWS region used for CLI invocation must match the region
+where Terraform deployed the Lambda function.
+
+The default deployment region used by the Terraform configuration is:
+
+us-west-2
+
+If this region changes in Terraform, the CLI commands and GitHub
+workflow configuration must also be updated.
 
 ---
 

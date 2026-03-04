@@ -11,7 +11,8 @@ How it works:
 
 Notes:
 - This runs locally on the machine executing `terraform apply`.
-- Requires python3 + pip + rsync installed locally.
+- Requires python3, pip, and rsync installed locally.
+  Only runtime dependencies from requirements.txt are packaged..
 */
 
 resource "terraform_data" "build_lambda_pkg" {

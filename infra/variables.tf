@@ -8,7 +8,7 @@ Keep these minimal; most per-environment config is passed via lambda_env.
 variable "aws_region" {
   type        = string
   description = "AWS region to deploy the Lambda into."
-  default     = "us-east-1"
+  default     = "us-west-2"
 }
 
 variable "aws_profile" {
@@ -51,6 +51,21 @@ variable "lambda_env" {
   type        = map(string)
   description = "Lambda environment variables (copy from your .env, minus secrets you don't want in TF state)."
   default     = {}
+}
+
+/*
+Optional override for the Lambda alias version.
+
+When null (default), the alias points to the newest published version.
+
+When set to a specific version number, Terraform will point the
+production alias to that version instead. This allows safe rollbacks
+without modifying infrastructure code.
+*/
+variable "lambda_alias_version_override" {
+  type        = string
+  default     = null
+  description = "Optional Lambda version to pin the prod alias to for rollback."
 }
 
 
