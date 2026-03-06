@@ -22,6 +22,10 @@ data "aws_iam_policy_document" "lambda_assume" {
 resource "aws_iam_role" "lambda_role" {
   name               = "${local.name_prefix}-role"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "basic_logs" {
@@ -66,6 +70,10 @@ data "aws_iam_policy_document" "bloodhound" {
 resource "aws_iam_policy" "bloodhound_policy" {
   name   = "${local.name_prefix}-policy"
   policy = data.aws_iam_policy_document.bloodhound.json
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "bloodhound_attach" {

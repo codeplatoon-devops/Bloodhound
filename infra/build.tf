@@ -10,9 +10,34 @@ How it works:
 2) archive_file.lambda_zip zips that directory into ../.build/bloodhound_lambda_v2.zip
 
 Notes:
-- This runs locally on the machine executing `terraform apply`.
-- Requires python3, pip, and rsync installed locally.
-  Only runtime dependencies from requirements.txt are packaged..
+
+• This build runs locally on the machine executing `terraform apply`.
+
+• Required local tools:
+  - python3
+  - pip
+  - rsync
+
+• Dependency installation uses:
+
+  python3 -m pip install --upgrade --no-cache-dir -r requirements.txt -t .build/lambda_pkg
+
+  Flags explained:
+
+  --upgrade
+      Ensures the newest compatible versions of dependencies are installed.
+
+  --no-cache-dir
+      Prevents pip cache reuse which can cause corrupted or inconsistent
+      dependency resolution across machines.
+
+  -t .build/lambda_pkg
+      Installs dependencies directly into the Lambda package directory.
+
+• Only runtime dependencies listed in `requirements.txt` are packaged.
+
+  Development-only dependencies live in `requirements-dev.txt`
+  and are used only for local development/testing.
 */
 
 resource "terraform_data" "build_lambda_pkg" {
@@ -37,7 +62,7 @@ resource "terraform_data" "build_lambda_pkg" {
 set -euo pipefail
 rm -rf .build
 mkdir -p .build/lambda_pkg
-python3 -m pip install -r requirements.txt -t .build/lambda_pkg
+python3 -m pip install --upgrade --no-cache-dir -r requirements.txt -t .build/lambda_pkg
 rsync -a bloodhound/ .build/lambda_pkg/bloodhound/
 rsync -a handlers/ .build/lambda_pkg/handlers/
 echo "Prepared package dir: .build/lambda_pkg"

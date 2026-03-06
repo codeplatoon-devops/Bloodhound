@@ -252,6 +252,62 @@ If this region changes in Terraform, the CLI commands and GitHub
 workflow configuration must also be updated.
 
 ---
+## Terraform Deployment Workflow
+
+Bloodhound v2 infrastructure is deployed using Terraform.
+
+Run Terraform from the `infra/` directory.
+
+### Step 1 — Bootstrap Existing Resources (first run only)
+
+If the AWS account already contains Bloodhound IAM resources
+(for example from a previous manual deployment), Terraform must
+import them into state before the first apply.
+
+This repository includes a helper script to automate this process.
+
+```bash
+cd infra
+./bootstrap_imports.sh
+```
+
+The script will:
+
+detect existing IAM role bloodhound-v2-role
+
+detect existing IAM policy bloodhound-v2-policy
+
+import them into Terraform state if they already exist
+
+This step only needs to be performed once when introducing Terraform
+into an existing AWS account.
+
+### Step 2 — Deploy Infrastructure
+
+```bash
+cd infra
+terraform init
+terraform apply
+```
+
+Terraform will automatically:
+
+Build the Lambda deployment package locally
+
+Install runtime dependencies from requirements.txt
+
+Create or update IAM roles and policies
+
+Deploy the Lambda function
+
+Create the Lambda Function URL
+
+After deployment Terraform will output the Lambda URL used by Slack commands.
+
+Example output:
+
+`lambda_function_url = https://xxxxx.lambda-url.us-west-2.on.aws/`
+
 
 ## GitHub Actions (invoke v2)
 

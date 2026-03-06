@@ -69,3 +69,7 @@ variable "lambda_alias_version_override" {
 }
 
 
+variable "expected_aws_account_id" {
+  description = "Safety guard: ensure Terraform is running against the correct AWS account."
+  type        = string
+}

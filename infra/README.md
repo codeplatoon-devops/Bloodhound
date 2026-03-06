@@ -4,6 +4,39 @@ This directory provisions the AWS infrastructure for running Bloodhound v2 with 
 
 We use a **Lambda Function URL** (single endpoint) for `/seek` and `/seek_destroy`.
 
+## First-Time Terraform Setup
+
+If the AWS account already contains Bloodhound resources
+(for example IAM roles or policies created manually or by
+earlier deployments), Terraform must import them before the
+first `terraform apply`.
+
+Terraform cannot automatically adopt existing AWS resources.
+
+To simplify this process, this repository includes a helper script:
+
+```bash
+cd infra
+./bootstrap_imports.sh
+```
+
+The script will:
+
+detect existing IAM role bloodhound-v2-role
+
+detect existing IAM policy bloodhound-v2-policy
+
+import them into Terraform state if necessary
+
+After running the bootstrap script, proceed with deployment:
+
+terraform init
+terraform apply
+
+This step is typically required only once when Terraform is
+introduced into an AWS account that already contains Bloodhound
+infrastructure.
+
 ### What Terraform creates
 
 - Lambda function: `BloodhoundLambdaV2`

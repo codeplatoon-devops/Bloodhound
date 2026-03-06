@@ -6,12 +6,20 @@
 # Avoid putting Slack tokens or secrets here. Prefer setting secrets in the Lambda console
 # or via your preferred secret management approach.
 
-aws_region  = "us-east-1"
-aws_profile = "geekstar"
+aws_region  = "us-west-2"
+
+# Optional: AWS CLI profile Terraform should use when authenticating.
+# If omitted, Terraform will use the default AWS credential chain
+# (environment variables, SSO session, or the default profile).
+#aws_profile = ""
 
 name_prefix          = "bloodhound-v2"
 lambda_function_name = "BloodhoundLambdaV2"
 lambda_runtime       = "python3.10"
+
+# Safety guard: Terraform will refuse to deploy if the active AWS
+# credentials belong to a different account than this ID.
+expected_aws_account_id = "123456789012"
 
 # Non-secret env vars can live here safely.
 lambda_env = {
