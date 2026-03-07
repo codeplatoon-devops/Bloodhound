@@ -39,6 +39,22 @@ def execute_actions(clients: AwsClients, actions: list[PlannedAction], *, simula
     simulated_count = 0
     failures: list[str] = []
 
+    # ------------------------------------------------------------------
+    # Safety guard: prevent large accidental deletions
+    #
+    # If the teardown plan contains too many resources, abort execution.
+    # This protects against scanning bugs or unexpected AWS API results
+    # that could otherwise cause mass deletion.
+    # ------------------------------------------------------------------
+    from bloodhound.config import load_config
+    cfg = load_config()
+
+    if len(actions) > cfg.teardown.max_delete_count:
+        raise RuntimeError(
+            f"Teardown aborted: plan contains {len(actions)} resources "
+            f"which exceeds TEARDOWN_MAX_DELETE_COUNT={cfg.teardown.max_delete_count}"
+        )
+
     for a in actions:
         attempted += 1
         try:

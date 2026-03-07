@@ -86,6 +86,7 @@ class TeardownConfig:
     allow_all_targets: bool
     teardown_mode: str  # delete (future: stop)
     rds_final_snapshot: bool
+    max_delete_count: int  # safety limit for number of deletions per run
 
 
 @dataclass(frozen=True)
@@ -137,6 +138,10 @@ def load_config() -> AppConfig:
     teardown_mode = (_env("TEARDOWN_MODE", "delete") or "delete").lower()
     rds_final_snapshot = _env_bool("RDS_FINAL_SNAPSHOT", False)
 
+    # Safety guard: prevent large accidental deletions.
+    # If a teardown plan exceeds this number, execution will stop.
+    max_delete_count = _env_int("TEARDOWN_MAX_DELETE_COUNT", 5)
+
     cohort_start_yyyy_mm = _env("COHORT_START_YYYY_MM", "") or ""
     cohort_total_budget_usd = _env_float("COHORT_TOTAL_BUDGET_USD", 3000.0)
     cohort_length_months = _env_int("COHORT_LENGTH_MONTHS", 7)
@@ -164,6 +169,7 @@ def load_config() -> AppConfig:
             allow_all_targets=allow_all_targets,
             teardown_mode=teardown_mode,
             rds_final_snapshot=rds_final_snapshot,
+            max_delete_count=max_delete_count,
         ),
         budget=BudgetConfig(
             cohort_start_yyyy_mm=cohort_start_yyyy_mm,

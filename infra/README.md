@@ -361,6 +361,7 @@ Running `terraform apply` again will move the alias back to the newest deployed 
 
 If a rollback must remain active, the underlying issue should be fixed before the next Terraform deployment
 ------
+
 ### Permanent Rollback Using Terraform
 
 Because Terraform manages the Lambda alias, a rollback performed in the AWS console is temporary.
@@ -418,3 +419,30 @@ terraform apply -var="lambda_alias_version_override=null"
 ```
 
 After this, Terraform deployments will again move the prod alias to the newest published version automatically.
+
+## Destructive Mode Deployment Guard
+
+Bloodhound includes a Terraform safety guard that prevents
+deployments when destructive mode is enabled.
+
+If the Lambda environment variable:
+
+APPLY_CHANGES=true
+
+Terraform will refuse to deploy unless the engineer explicitly
+acknowledges the action.
+
+Example error:
+
+Deployment blocked: APPLY_CHANGES=true requires -var allow_apply_mode=true
+
+To intentionally deploy with destructive mode enabled:
+
+terraform apply -var allow_apply_mode=true
+
+This guard exists to prevent accidental deployments that could
+allow Bloodhound to delete infrastructure.
+
+Normal deployments should run with:
+
+APPLY_CHANGES=false

@@ -73,3 +73,29 @@ variable "expected_aws_account_id" {
   description = "Safety guard: ensure Terraform is running against the correct AWS account."
   type        = string
 }
+
+/*
+Safety override for destructive mode.
+
+Bloodhound can delete infrastructure when APPLY_CHANGES=true.
+To prevent accidental deletion, Terraform blocks deployment
+unless this variable is explicitly enabled.
+
+Example failure:
+
+APPLY_CHANGES=true
+allow_apply_mode=false
+
+Terraform will stop with an error.
+
+To intentionally enable destructive mode for testing:
+
+terraform apply -var allow_apply_mode=true
+
+Default is false so deletion cannot be enabled accidentally.
+*/
+variable "allow_apply_mode" {
+  description = "Explicit override required to deploy Bloodhound with APPLY_CHANGES=true."
+  type        = bool
+  default     = false
+}

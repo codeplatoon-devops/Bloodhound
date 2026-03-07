@@ -187,19 +187,79 @@ are treated as **kept (whitelisted)** and are excluded from teardown.
 
 ## Teardown controls (important)
 
-By default, Bloodhound posts a teardown plan only:
+By default, Bloodhound runs in **dry-run mode** and only posts
+a teardown plan:
 
 - `APPLY_CHANGES=false`
 
-To delete/terminate non-whitelisted resources:
+To allow Bloodhound to delete resources:
 
 - `APPLY_CHANGES=true`
 
-Safety rails:
+### Deletion safety limit
+
+Bloodhound includes a protection that limits how many resources can
+be deleted in a single run.
+
+Environment variable:
+
+TEARDOWN_MAX_DELETE_COUNT
+
+Default value:
+
+10
+
+If a teardown plan contains more resources than this limit,
+Bloodhound will abort execution and refuse to delete anything.
+
+Example:
+
+Plan: 25 resources  
+Limit: 10  
+
+Result:
+
+Teardown aborted.
+
+This protects against unexpected scanning behavior or configuration
+errors that could otherwise delete large amounts of infrastructure.
+
+### Runtime safety rails
+
+Bloodhound includes several runtime safeguards:
 
 - **simulate (no deletes)**: `TEARDOWN_SIMULATE=true`
 - **only delete explicit IDs/ARNs**: set `TEARDOWN_TARGET_IDS=...`
 - **delete everything not whitelisted**: `TEARDOWN_ALLOW_ALL=true`
+
+
+### Infrastructure safety guard
+
+Terraform includes an additional **deployment safety guard**.
+
+If the environment variable contains:
+
+
+APPLY_CHANGES=true
+
+
+Terraform will **block the deployment** unless the engineer
+explicitly confirms destructive mode.
+
+Example error:
+
+
+Deployment blocked: APPLY_CHANGES=true requires -var allow_apply_mode=true
+
+
+To intentionally deploy Bloodhound with destructive mode enabled:
+
+
+terraform apply -var allow_apply_mode=true
+
+
+This prevents accidental infrastructure deletion caused by
+misconfigured environment variables or commits.
 
 ---
 

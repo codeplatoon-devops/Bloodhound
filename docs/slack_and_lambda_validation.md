@@ -175,5 +175,389 @@ Instead of navigating CloudWatch manually:
 This validation is complete when:
 
 - `/seek` produces the expected Slack output (scan summary, budget summary, teardown plan)
+- `/seek_destroy` enforces its confirmation and allowlist protections
 - CloudWatch logs show a corresponding invocation and execution path
 - No destructive actions occur during validation (dry-run / simulate mode only)
+
+## Validating `/seek_destroy` Safety Controls
+
+The `/seek_destroy` command has multiple protection layers to prevent
+accidental destructive actions.
+
+During validation you should confirm these protections are functioning.
+
+### Step 1 — Run destroy command without confirmation
+
+In Slack run:
+
+
+/seek_destroy
+
+
+Expected result:
+
+Slack should return a message similar to:
+
+
+Not allowed. Use /seek_destroy CONFIRM (and ensure you are allowlisted).
+
+
+This confirms the confirmation token protection is working.
+
+---
+
+### Step 2 — Run destroy command with confirmation
+
+Run:
+
+/seek_destroy CONFIRM
+
+The command may still be rejected if allowlists are configured.
+
+Bloodhound validates the following environment variables:
+
+- `SLACK_DESTROY_CONFIRM_TOKEN`
+- `SLACK_ALLOWED_USER_IDS`
+- `SLACK_ALLOWED_CHANNEL_IDS`
+
+If allowlists are defined and the user/channel is not included,
+the command will return the same **Not allowed** response.
+
+---
+
+### Expected behavior during validation
+
+Even when the command succeeds, destructive actions should **not**
+occur because runtime safety flags are enabled.
+
+Relevant environment variables:
+
+APPLY_CHANGES=false
+TEARDOWN_SIMULATE=true
+
+The full teardown safety model and configuration reference
+is documented in:
+
+`docs/bloodhound_v2_plan.md`
+
+This forces Bloodhound to operate in **dry-run mode**, meaning it
+will only generate a teardown plan and never call destructive AWS APIs.
+
+---
+
+### What successful validation looks like
+
+You should observe:
+
+1. `/seek_destroy` without confirmation → rejected
+2. `/seek_destroy CONFIRM` → allowed only if allowlisted
+3. Slack responses generated correctly
+4. Lambda invocation visible in CloudWatch logs
+5. No AWS resources are deleted
+
+## Verify Lambda Environment Variables
+
+If Slack commands behave unexpectedly, verify that the Lambda environment
+variables were correctly deployed by Terraform.
+
+NOTE: Ensure the AWS CLI region matches the Terraform deployment region
+(us-west-2). Otherwise Lambda may appear "missing".
+
+Run:
+
+aws lambda get-function-configuration \
+--region us-west-2 \
+--function-name BloodhoundLambdaV2 \
+--query 'Environment.Variables'
+
+This command prints the runtime configuration currently applied to the Lambda.
+
+Confirm that the expected variables appear, such as:
+
+SLACK_ENABLED  
+SLACK_SCAN_CHANNEL_ID  
+SLACK_ALERT_CHANNEL_ID  
+SLACK_SIGNING_SECRET  
+APPLY_CHANGES  
+TEARDOWN_SIMULATE  
+
+If any variables are missing, Terraform may not have applied the latest
+configuration.
+
+To fix:
+
+terraform plan  
+terraform apply
+
+---
+
+## Watching Lambda Logs Live
+
+Instead of refreshing CloudWatch in the console, you can stream Lambda
+logs directly in your terminal. This is very useful when debugging
+slash command behavior while triggering `/seek` or `/seek_destroy`.
+
+### Command
+
+```bash
+aws logs tail /aws/lambda/BloodhoundLambdaV2 \
+--region us-west-2 \
+--follow
+````
+
+### What this does
+
+This command:
+
+```
+connects to CloudWatch
+↓
+streams new Lambda log events
+↓
+prints them in your terminal
+```
+
+It behaves similarly to:
+
+```
+tail -f
+```
+
+for Lambda logs.
+
+---
+
+### Recommended workflow
+
+Open **two terminals**.
+
+#### Terminal 1 — watch logs
+
+Run:
+
+```bash
+aws logs tail /aws/lambda/BloodhoundLambdaV2 \
+--region us-west-2 \
+--follow
+```
+
+Leave it running.
+
+#### Terminal 2 — trigger Slack command
+
+In Slack run:
+
+```
+/seek
+```
+
+or
+
+```
+/seek_destroy CONFIRM
+```
+
+---
+
+### Expected output
+
+When Lambda runs you should see logs similar to:
+
+```
+START RequestId: ...
+Received Slack slash command
+command=/seek
+Scanning region us-east-1
+Scanning region us-west-2
+Posting Slack summary
+END RequestId: ...
+REPORT Duration: 14110 ms
+```
+
+This confirms the full execution path from Slack → Lambda → AWS scan.
+
+---
+
+### Why this command is useful
+
+It allows you to immediately see runtime errors such as:
+
+```
+Slack signature verification failed
+Missing environment variable
+AccessDenied
+Invalid token
+```
+
+without navigating through the CloudWatch console.
+
+---
+
+### Optional improvements
+
+Add timestamps:
+
+```bash
+aws logs tail /aws/lambda/BloodhoundLambdaV2 \
+--region us-west-2 \
+--follow \
+--format short
+```
+
+Filter only errors:
+
+```bash
+aws logs tail /aws/lambda/BloodhoundLambdaV2 \
+--region us-west-2 \
+--follow \
+--filter-pattern "ERROR"
+```
+
+## Common Failure Scenarios
+
+This section lists common issues that may occur when validating
+Slack commands or Lambda execution.
+
+---
+
+### 1. Slash command returns “Function not found”
+
+Example error:
+
+An error occurred (ResourceNotFoundException)
+Function not found
+
+Cause:
+
+The AWS CLI or console is using the wrong region.
+
+Bloodhound V2 is deployed in:
+
+us-west-2
+
+Fix:
+
+Specify the region explicitly when using the CLI:
+
+aws lambda get-function-configuration
+--region us-west-2
+--function-name BloodhoundLambdaV2
+
+
+Or switch the AWS Console region to `us-west-2`.
+
+---
+
+### 2. Slack command produces no response
+
+Possible causes:
+
+- Slack Request URL is incorrect
+- Lambda Function URL is disabled
+- Lambda permissions were removed
+- Slack app was not reinstalled after manifest changes
+
+Fix:
+
+Verify the Slack command configuration:
+
+
+Slack App → Slash Commands
+
+
+Ensure the Request URL matches the Terraform output:
+
+
+Lambda Function URL
+
+
+---
+
+### 3. `/seek_destroy` returns “Not allowed”
+
+Example response:
+
+Not allowed. Use /seek_destroy CONFIRM (and ensure you are allowlisted).
+
+This is expected behavior if safety checks fail.
+
+Possible causes:
+
+- Missing confirmation token
+- User not in `SLACK_ALLOWED_USER_IDS`
+- Channel not in `SLACK_ALLOWED_CHANNEL_IDS`
+
+Verify the Lambda environment variables:
+
+SLACK_DESTROY_CONFIRM_TOKEN
+SLACK_ALLOWED_USER_IDS
+SLACK_ALLOWED_CHANNEL_IDS
+
+---
+
+### 4. Slash command succeeds but no logs appear
+
+Cause:
+
+The CloudWatch log group may not exist yet if Lambda has never run.
+
+Fix:
+
+Run the command again:
+
+/seek
+
+Lambda automatically creates the log group on first execution.
+
+---
+
+### 5. Terraform changes not reflected in Lambda
+
+Cause:
+
+Terraform may not have applied the latest configuration.
+
+Fix:
+
+Run:
+
+terraform plan
+terraform apply
+
+Then verify Lambda environment variables:
+
+aws lambda get-function-configuration
+--region us-west-2
+--function-name BloodhoundLambdaV2
+--query 'Environment.Variables'
+
+---
+
+### 6. Unexpected teardown behavior
+
+If `/seek_destroy` appears to plan more resources than expected:
+
+Check the whitelist configuration:
+
+KEEP_TAG_KEY
+KEEP_TAG_VALUE
+
+Resources tagged with these values will be excluded from teardown.
+
+Example:
+
+bloodhound:keep=true
+
+---
+
+## When to Escalate
+
+If validation fails after following the steps above:
+
+1. Capture the Slack command output
+2. Capture the CloudWatch logs
+3. Capture the Lambda environment variables
+4. Capture the Terraform plan output
+
+These artifacts should be sufficient to diagnose most issues with the
+Slack → Lambda → AWS execution pipeline.

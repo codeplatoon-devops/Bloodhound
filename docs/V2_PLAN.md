@@ -37,12 +37,31 @@ Bloodhound v2 is already deployed as a **new** Lambda (`BloodhoundLambdaV2`) so 
 
 - Default is **dry-run** (`APPLY_CHANGES=false`)
 - Safe testing of apply-mode: **simulate** (`TEARDOWN_SIMULATE=true`)
-- Strong safety rails:
-  - Explicit allowlist: `TEARDOWN_TARGET_IDS=...`
-  - Allow-all mode: `TEARDOWN_ALLOW_ALL=true` (dangerous; relies on whitelisting)
+Strong safety rails:
+
+- Explicit allowlist: TEARDOWN_TARGET_IDS=...
+- Allow-all mode: TEARDOWN_ALLOW_ALL=true (dangerous; relies on whitelisting)
+
+Infrastructure safety guard:
+
+Terraform prevents deployment when destructive mode is enabled
+unless the engineer explicitly acknowledges it.
+
+If:
+
+APPLY_CHANGES=true
+
+Terraform will refuse to deploy unless the command includes:
+
+terraform apply -var allow_apply_mode=true
+
+This prevents accidental deployments that would enable automated deletion.
 - Slash destroy requires:
   - Confirm token: `/seek_destroy CONFIRM` (configurable token)
   - Optional allowlists: user/channel IDs
+
+Bloodhound always generates a teardown plan (a list of resources it would delete).
+If deletion is disabled, the plan is shown in Slack but no resources are removed.
 
 ---
 

@@ -45,6 +45,15 @@ lambda_env = {
   # Optional allowlists (comma-separated)
   SLACK_ALLOWED_USER_IDS    = ""
   SLACK_ALLOWED_CHANNEL_IDS = ""
+
+  # Teardown controls
+  APPLY_CHANGES      = "false"
+  TEARDOWN_SIMULATE  = "true"
+  TEARDOWN_TARGET_IDS = ""
+  TEARDOWN_ALLOW_ALL = "false"
+  RDS_FINAL_SNAPSHOT = "false"
+
+  TEARDOWN_MAX_DELETE_COUNT = "5"
 }
 
 
