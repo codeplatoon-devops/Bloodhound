@@ -92,6 +92,22 @@ This command tells Bloodhound to **execute the teardown plan**.
 
 ---
 
+## Validate Lambda Health Endpoint
+
+Before testing Slack integrations, confirm the Lambda service is reachable.
+
+curl https://YOUR_LAMBDA_URL/health
+
+Expected response:
+
+{
+  "ok": true,
+  "service": "BloodhoundLambdaV2",
+  "status": "healthy"
+}
+
+This check verifies the Lambda deployment without triggering a scan.
+
 # Step 3 — Automatic Deletion Verification
 
 After the Slack command runs, the validation script will automatically verify that the resource was deleted.
@@ -142,6 +158,41 @@ Only the **3 most recent logs** are kept automatically.
 ---
 
 # What the Validation Tests
+
+# Bloodhound Execution Modes
+
+Bloodhound has three safety modes controlled by environment variables.
+
+Dry Run Mode (default)
+
+APPLY_CHANGES=false
+TEARDOWN_SIMULATE=true
+
+Behavior:
+• resources are scanned
+• teardown plan is generated
+• nothing is deleted
+
+
+Simulation Mode
+
+APPLY_CHANGES=true
+TEARDOWN_SIMULATE=true
+
+Behavior:
+• deletion calls are simulated
+• AWS DryRun APIs are used
+• nothing is deleted
+
+
+Apply Mode (destructive)
+
+APPLY_CHANGES=true
+TEARDOWN_SIMULATE=false
+
+Behavior:
+• Bloodhound executes deletion actions
+• non-whitelisted resources may be removed
 
 The validation workflow confirms the following systems work together:
 

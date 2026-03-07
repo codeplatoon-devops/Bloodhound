@@ -12,17 +12,35 @@
     "slash_commands": [
       {
         "command": "/seek",
-        "description": "Scan AWS resources and report back",
-        "usage_hint": "Runs a scan and reports back findings in the channel",
+        "description": "Scan AWS resources and report results",
         "should_escape": false,
-        "url": "https://example.com"
+        "url": "https://kn5244cyenar6pzgexnrq5oh2m0ohyvb.lambda-url.us-west-2.on.aws/"
       },
       {
         "command": "/seek_destroy",
-        "description": "Scan & destroy untagged resources",
+        "description": "Execute destructive cleanup (requires CONFIRM)",
         "usage_hint": "CONFIRM",
         "should_escape": false,
-        "url": "https://example.com"
+        "url": "https://kn5244cyenar6pzgexnrq5oh2m0ohyvb.lambda-url.us-west-2.on.aws/"
+      },
+      {
+        "command": "/v2_seek",
+        "description": "Run a non-destructive AWS scan",
+        "should_escape": false,
+        "url": "https://kn5244cyenar6pzgexnrq5oh2m0ohyvb.lambda-url.us-west-2.on.aws/"
+      },
+      {
+        "command": "/v2_seek_destroy",
+        "description": "Execute destructive cleanup of non-whitelisted resources",
+        "usage_hint": "CONFIRM",
+        "should_escape": false,
+        "url": "https://kn5244cyenar6pzgexnrq5oh2m0ohyvb.lambda-url.us-west-2.on.aws/"
+      },
+      {
+        "command": "/v2_seek_destroy_plan",
+        "description": "Preview the teardown plan without deleting resources",
+        "should_escape": false,
+        "url": "https://kn5244cyenar6pzgexnrq5oh2m0ohyvb.lambda-url.us-west-2.on.aws/"
       }
     ]
   },

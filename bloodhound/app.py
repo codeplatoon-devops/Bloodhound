@@ -49,13 +49,27 @@ def run(event: Any, context: Any) -> dict[str, Any]:
     # apply teardown overrides FIRST, then load config so the same invocation uses the intended flags.
     if isinstance(event, dict) and event.get("source") == "slack_command":
         mode = (event.get("mode") or "").strip()
-        # /seek = scan + reports only
+        # /seek = scan only (safe mode)
+        # - performs resource scan
+        # - generates teardown plan
+        # - no deletion allowed
         if mode == "seek":
             os.environ["APPLY_CHANGES"] = "false"
             os.environ["TEARDOWN_SIMULATE"] = "true"
             os.environ["TEARDOWN_ALLOW_ALL"] = "false"
-        # /seek_destroy = destructive mode (delete all non-whitelisted candidates)
-        elif mode == "seek_destroy":
+
+        # /seek_destroy_plan = preview teardown plan for all candidates
+        # - still safe mode
+        # - allows engineers to review what would be deleted
+        elif mode == "seek_destroy_plan":
+            os.environ["APPLY_CHANGES"] = "false"
+            os.environ["TEARDOWN_SIMULATE"] = "true"
+            os.environ["TEARDOWN_ALLOW_ALL"] = "true"
+
+        # /seek_destroy_execute = destructive teardown execution
+        # - executes real AWS deletion APIs
+        # - deletes all non-whitelisted resources
+        elif mode == "seek_destroy_execute":
             os.environ["APPLY_CHANGES"] = "true"
             os.environ["TEARDOWN_SIMULATE"] = "false"
             os.environ["TEARDOWN_ALLOW_ALL"] = "true"

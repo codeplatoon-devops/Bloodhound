@@ -1,16 +1,19 @@
 /*
 infra/outputs.tf
 
-Outputs you copy into Slack configuration:
-- lambda_function_url -> Slack slash command Request URL
+Outputs used by operators when configuring Slack commands
+and validating deployments.
+
+To retrieve the Slack command endpoint:
+
+terraform output bloodhound_lambda_url
 */
 
 output "lambda_function_name" {
   value = aws_lambda_function.bloodhound_v2.function_name
 }
 
-output "lambda_function_url" {
-  value = aws_lambda_function_url.bloodhound_url.function_url
+output "bloodhound_lambda_url" {
+  description = "Public Lambda Function URL used by Slack slash commands"
+  value       = aws_lambda_function_url.bloodhound_url.function_url
 }
-
-

@@ -178,8 +178,29 @@ def format_teardown_plan_message(
     targets_filter_count: int,
     allow_all: bool,
 ) -> str:
-    header = "*Bloodhound v2 — Teardown Plan (APPLY MODE)*" if apply_changes else "*Bloodhound v2 — Teardown Plan (dry-run)*"
-    lines = [header, _fmt_kv("time_et", _et_now_time_str()), ""]
+    # Determine execution mode for Slack output.
+    # This ensures the Slack message clearly shows whether Bloodhound
+    # is running in dry-run, simulation, or real deletion mode.
+    if not apply_changes:
+        # Safe default: planning mode only
+        mode_text = "DRY RUN — No resources will be deleted"
+    elif simulate:
+        # Executor enabled but destructive calls are simulated
+        mode_text = "SIMULATION — Deletion calls are simulated"
+    else:
+        # True destructive execution mode
+        mode_text = "APPLY (DESTRUCTIVE) — Resources WILL be deleted"
+
+    # Slack message header
+    header = "*Bloodhound v2 — Teardown Plan*"
+
+    # First lines of the Slack report
+    lines = [
+        header,
+        _fmt_kv("mode", f"`{mode_text}`"),
+        _fmt_kv("time_et", _et_now_time_str()),
+        ""
+    ]
 
     targets_filter_active = targets_filter_count > 0
     lines.append(_fmt_kv("simulate", f"`{str(simulate).lower()}`"))

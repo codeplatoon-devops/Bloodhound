@@ -52,6 +52,20 @@ fi
 set -e
 
 # ------------------------------------------------------------------
+# Disable AWS CLI Pager
+#
+# Some AWS CLI commands automatically open output in a pager
+# (usually "less"), which pauses script execution and displays
+# an "(END)" prompt until the user exits manually.
+#
+#
+# Setting AWS_PAGER="" disables the pager so AWS CLI commands
+# print directly to stdout instead of launching an interactive
+# viewer.
+# ------------------------------------------------------------------
+export AWS_PAGER=""
+
+# ------------------------------------------------------------------
 # Load environment variables
 #
 # This loads the .env file so validation scripts can access
@@ -199,8 +213,9 @@ echo ""
 log "Step 1: Creating disposable EC2 instance"
 echo ""
 
-terraform apply \
+terraform -chdir=infra apply \
   -var "validation_run_id=$RUN_ID" \
+  -var "enable_validation_resources=true" \
   -auto-approve
 
 
@@ -370,7 +385,7 @@ read -p "Press ENTER once Terraform configuration has been restored..."
 # ------------------------------------------------------------------
 
 terraform -chdir=infra apply \
-  -var="enable_validation_resources=true" \
+  -var="enable_validation_resources=false" \
   -auto-approve
 
 

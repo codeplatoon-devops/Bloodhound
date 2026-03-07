@@ -3,59 +3,57 @@
 #
 # This Terraform resource defines a temporary EC2 instance used
 # exclusively for validating Bloodhound's teardown pipeline.
-#
-# The validation process verifies that Bloodhound can:
-#   1. Detect an AWS resource during a scan
-#   2. Include the resource in the teardown plan
-#   3. Execute the deletion successfully
-#
-# This resource is NOT created during normal Terraform deployments.
-# It is only created when the variable:
-#
-#   enable_validation_resources = true
-#
-# is passed during the validation script execution.
-#
-# Example:
-#
-# terraform apply -var="enable_validation_resources=true"
-#
-# After validation completes, the resource is destroyed and
-# removed from Terraform state.
 # ------------------------------------------------------------
 
+
+# ------------------------------------------------------------
+# Lookup Latest Amazon Linux 2 AMI
+#
+# Hardcoding AMI IDs eventually breaks because AWS retires
+# images over time. Instead Terraform dynamically retrieves
+# the newest Amazon Linux 2 image published by AWS.
+# ------------------------------------------------------------
+data "aws_ami" "amazon_linux_2" {
+
+  most_recent = true
+
+  owners = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+  }
+
+}
+
+
+# ------------------------------------------------------------
+# Lookup available subnets
+#
+# Some AWS accounts do not have a default subnet automatically
+# selected for EC2 launches. This data source retrieves a list
+# of subnets so Terraform can attach the validation instance.
+# ------------------------------------------------------------
+data "aws_subnets" "default" {}
+
+
+# ------------------------------------------------------------
+# Temporary EC2 instance used for teardown validation
+# ------------------------------------------------------------
 resource "aws_instance" "bloodhound_teardown_test" {
 
-  # ----------------------------------------------------------
-  # Conditional resource creation
-  #
-  # Terraform will only create this instance when the
-  # validation script enables validation infrastructure.
-  #
-  # Normal Terraform deployments use:
-  #
-  # enable_validation_resources = false
-  #
-  # which results in:
-  #
-  # count = 0  → resource not created
-  # ----------------------------------------------------------
+  # Create only during validation runs
   count = var.enable_validation_resources ? 1 : 0
 
-  # ----------------------------------------------------------
-  # Small disposable instance used purely for validation.
-  #
-  # Amazon Linux 2 is lightweight and inexpensive.
-  # ----------------------------------------------------------
-  ami           = "ami-0c02fb55956c7d316"
+  # Instance configuration
+  ami           = data.aws_ami.amazon_linux_2.id
   instance_type = "t3.micro"
+
+  # Attach instance to a discovered subnet
+  subnet_id = data.aws_subnets.default.ids[0]
 
   # ----------------------------------------------------------
   # Lifecycle rule
-  #
-  # Ensures Terraform creates a replacement resource before
-  # destroying an existing one. This prevents edge cases
-  # during repeated validation runs.
   # ----------------------------------------------------------
   lifecycle {
     create_before_destroy = true
@@ -63,37 +61,21 @@ resource "aws_instance" "bloodhound_teardown_test" {
 
   # ----------------------------------------------------------
   # Resource tags
-  #
-  # Tags help engineers quickly identify validation resources
-  # in the AWS console and prevent confusion with production
-  # infrastructure.
-  #
-  # Keys containing ":" must be quoted in Terraform maps.
   # ----------------------------------------------------------
   tags = {
     Name        = "bloodhound-teardown-test"
     Environment = "validation"
 
-    # Indicates this instance exists only for validation
-    "bloodhound:test" = "true"
-
-    # Identifies which validation created the resource
+    "bloodhound:test"      = "true"
     "bloodhound:test_type" = "teardown_validation"
   }
 
 }
 
+
 # ------------------------------------------------------------
 # Terraform Output
-#
-# The validation script reads this value to determine which
-# EC2 instance should be monitored and later verified as
-# deleted by Bloodhound.
-#
-# Because the resource uses "count", the instance becomes
-# a list and must be referenced with index [0].
 # ------------------------------------------------------------
-
 output "bloodhound_test_instance_id" {
-  value = aws_instance.bloodhound_teardown_test[0].id
+  value = try(aws_instance.bloodhound_teardown_test[0].id, null)
 }

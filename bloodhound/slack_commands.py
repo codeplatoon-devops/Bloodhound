@@ -14,6 +14,7 @@ Deployed via:
 from __future__ import annotations
 
 import base64
+#import cmd
 import hashlib
 import hmac
 import os
@@ -45,6 +46,23 @@ def handle_slack_command_http(event: dict[str, Any]) -> dict[str, Any]:
     Responds immediately (Slack requires fast response), then asynchronously invokes the
     same Lambda function to run the scan/teardown and post the normal Slack reports.
     """
+
+    # -------------------------------------------------------------
+    # Lightweight health endpoint for infrastructure validation
+    # Allows curl checks without requiring Slack signature headers
+    # -------------------------------------------------------------
+    raw_path = event.get("rawPath") or event.get("path") or ""
+    if raw_path == "/health":
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json_dumps({
+                "ok": True,
+                "service": "BloodhoundLambdaV2",
+                "status": "healthy"
+            }),
+        }
+
     # Slack request verification (signature + timestamp) is mandatory.
     signing_secret = os.environ.get("SLACK_SIGNING_SECRET", "").strip()
     if not signing_secret:
@@ -72,11 +90,20 @@ def handle_slack_command_http(event: dict[str, Any]) -> dict[str, Any]:
         return _http_text(200, "Not allowed in this channel.")
 
     # Route based on Slack's `command` field.
-    if cmd.command == "/seek":
+    # Non-destructive scan command
+    if cmd.command in ("/seek", "/v2_seek"):
         _invoke_worker(mode="seek", cmd=cmd)
         return _http_text(200, "BloodHound is on the hunt...please stand by.")
+    
+    # ------------------------------------------------------------
+    # Preview teardown plan (safe)
+    # ------------------------------------------------------------
+    if cmd.command in ("/v2_seek_destroy_plan",):
+        _invoke_worker(mode="seek", cmd=cmd)
+        return _http_text(200, "Generating teardown preview...please stand by.")
 
-    if cmd.command == "/seek_destroy":
+    # Destructive teardown command
+    if cmd.command in ("/seek_destroy", "/v2_seek_destroy"):
         if not _destroy_allowed(cmd):
             # Slack surfaces non-200 responses as "dispatch_failed", so return 200 with a helpful message.
             return _http_text(200, "Not allowed. Use `/seek_destroy CONFIRM` (and ensure you are allowlisted).")

@@ -22,10 +22,66 @@ The Slack app configuration is managed via a JSON manifest to ensure reproducibi
 Only minimal bot scopes are requested:
 
 - `chat:write` — post scan and budget messages  
-- `commands` — enable `/seek` and `/seek_destroy`  
-- `channels:read`, `groups:read`, `im:read`, `mpim:read` — read channel metadata  
+- `commands` — enable `/v2_seek`, `/v2_seek_destroy`, `/v2_status`  
+- `channels:read`, `groups:read`, `im:read`, `mpim:read` — read channel metadata
+
+Note: Although the Slack commands are `/v2_seek` and `/v2_seek_destroy`,
+the internal execution modes remain `seek` and `seek_destroy`.
+This preserves compatibility with existing scripts, validation tools,
+and documentation across the repository.
 
 No admin or elevated scopes are requested.
+
+## Slack Commands (Bloodhound V2)
+
+The Slack interface exposes the following commands:
+
+| Command | Description |
+|-------|-------------|
+| `/v2_seek` | Runs a non-destructive AWS scan and posts results |
+| /v2_seek_destroy_plan | Generates a teardown preview of resources that would be deleted |
+| /v2_seek_destroy CONFIRM | Executes destructive cleanup of non-whitelisted resources |
+| /v2_status | Returns service status and health information |
+
+Example usage:
+
+/v2_seek
+
+/v2_seek_destroy_plan
+
+/v2_seek_destroy CONFIRM
+
+/v2_status
+
+## Internal Command Mapping
+
+Although Slack commands are versioned (`/v2_*`), the internal Lambda
+execution modes remain unchanged.
+
+| Slack Command | Internal Mode |
+|---------------|--------------|
+| /v2_seek | seek |
+| /v2_seek_destroy_plan | seek_destroy_plan |
+| /v2_seek_destroy| seek_destroy |
+| /v2_status | status |
+
+## Teardown Safety Workflow
+
+Bloodhound uses a two-step teardown workflow to prevent accidental
+destructive operations.
+
+Typical workflow:
+
+1. /v2_seek
+   Perform a scan and generate a teardown preview.
+
+2. /v2_seek_destroy_plan
+   Review the full deletion plan for non-whitelisted resources.
+
+3. /v2_seek_destroy CONFIRM
+   Execute the teardown plan and delete resources.
+
+
 
 **Stateless HTTP integration**
 - `socket_mode_enabled = false`
@@ -39,7 +95,12 @@ This keeps the architecture simple and serverless.
 
 **Deployment flow**
 The `url` fields in slash commands are placeholders during setup.
-After Lambda deployment, update them to the deployed Lambda Function URL.
+
+After deploying the infrastructure, retrieve the Lambda endpoint with:
+
+terraform output bloodhound_lambda_url
+
+Use this URL as the Request URL for all slash commands.
 
 ### 1. Create or Update the Slack App
 
@@ -163,4 +224,42 @@ In the channel, run:
 
 ---
 
+
+## Planned Command: `/v2_status`
+
+The `/v2_status` command will return operational status information such as:
+
+- Lambda health
+- scan configuration
+- budget monitoring state
+- last execution summary
+
+Example:
+
+/v2_status
+
+Response example:
+
+Bloodhound V2 Status
+
+Service: healthy
+Lambda: active
+Budget monitor: enabled
+Last scan: 2 minutes ago
+
+## Validate Slack Command Endpoint
+
+After deployment, confirm the Lambda endpoint is active.
+
+Example:
+
+curl $(terraform output -raw bloodhound_lambda_url)/health
+
+Expected response:
+
+{
+  "ok": true,
+  "service": "BloodhoundLambdaV2",
+  "status": "healthy"
+}
 

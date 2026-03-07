@@ -30,6 +30,18 @@
 set -e  # exit immediately if any command fails
 
 # ------------------------------------------------------------
+# Disable AWS CLI pager
+#
+# AWS CLI v2 automatically sends long output to a pager
+# (usually "less"), which pauses scripts and displays "(END)"
+# until the user presses 'q'.
+#
+# Automation scripts should disable this behavior so output
+# prints directly to the terminal.
+# ------------------------------------------------------------
+export AWS_PAGER=""
+
+# ------------------------------------------------------------
 # Dependency check
 #
 # The script uses jq to parse JSON returned by AWS CLI.
