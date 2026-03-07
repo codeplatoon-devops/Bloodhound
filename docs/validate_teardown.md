@@ -14,6 +14,7 @@ This validation intentionally deletes a **temporary disposable resource**.
 
 This procedure should only be performed after the following validations succeed:
 
+- Infrastructure smoke test (`tools/smoke_test_lambda.sh`)
 - Slack command routing (`/seek`)
 - Lambda execution confirmed
 - CloudWatch logs visible
@@ -40,13 +41,50 @@ understanding Bloodhound’s teardown safety controls.
 ---
 
 # Validation Overview
+...
+Terraform → create test resource
+Slack → /seek confirms detection
+Slack → /seek_destroy CONFIRM deletes resource
+CLI → verify resource deletion
 
-The workflow for this test is:
+---
 
-Terraform → create test resource  
-Slack → `/seek` confirms detection  
-Slack → `/seek_destroy CONFIRM` deletes resource  
-CLI → verify resource deletion  
+# Infrastructure Smoke Test
+
+Before running the teardown validation, confirm that the Lambda
+deployment is healthy.
+
+Run:
+
+tools/smoke_test_lambda.sh
+
+This script verifies:
+
+- Lambda function exists
+- environment variables are configured
+- CloudWatch log group exists
+- Lambda Function URL is configured
+
+If the smoke test fails, fix the infrastructure deployment before
+continuing with teardown validation.
+
+# Automation Script
+
+The teardown validation workflow can be automated using:
+
+tools/validate_teardown.sh
+
+This script performs the Terraform resource creation, instance ID
+capture, and deletion verification steps automatically.
+
+Engineers only need to run the Slack commands:
+
+/seek
+/seek_destroy CONFIRM
+
+to complete the test.
+
+The script executes the same steps described below in this document.
 
 ---
 

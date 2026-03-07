@@ -99,3 +99,27 @@ variable "allow_apply_mode" {
   type        = bool
   default     = false
 }
+
+# ------------------------------------------------------------
+# Unique ID used to trace validation runs.
+# Passed from validation scripts so AWS resources can be
+# associated with a specific validation execution.
+# ------------------------------------------------------------
+
+variable "validation_run_id" {
+  description = "Unique validation run identifier"
+  type        = string
+  default     = "manual"
+}
+
+# ------------------------------------------------------------
+# Enables temporary infrastructure used for validation tests.
+# This should normally be disabled during regular Terraform
+# deployments.
+# ------------------------------------------------------------
+
+variable "enable_validation_resources" {
+  description = "Create temporary validation infrastructure"
+  type        = bool
+  default     = false
+}

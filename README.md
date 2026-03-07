@@ -2,6 +2,7 @@
 
 Bloodhound v2 scans selected AWS regions for common cost-leak resources, posts results to Slack, and can optionally delete resources that are **not** whitelisted.
 
+
 - Clone this repo
 - Configure `.env` for local testing
 - Rebuild the deployment zip locally (the `.build/` dir is not committed)
@@ -14,6 +15,44 @@ Project docs:
 - v2 plan: `docs/V2_PLAN.md`
 
 ![AWS Architecture Diagram (v2)](assets/bloodhound_lambda_architecture_v2.svg)
+
+## ⚠️ STOP — Read This Before Running Bloodhound
+
+Bloodhound can delete AWS infrastructure when `APPLY_CHANGES=true`.
+
+Before running validation scripts or enabling destructive mode, review:
+
+📘 [Bloodhound v2 Configuration Guide](docs/configuration.md)
+
+This document explains:
+
+- teardown mode configuration
+- deletion safety limits
+- AWS account validation guards
+- Terraform deployment protections
+- Bloodhound safety architecture
+
+---
+
+## Documentation
+
+Configuration and safety model:
+
+📘 [docs/configuration.md](docs/configuration.md)
+
+Slack command validation:
+
+📘 [docs/validate_slack_lambda.md](docs/validate_slack_lambda.md)
+
+Controlled teardown validation:
+
+📘 [docs/validate_teardown.md](docs/validate_teardown.md)
+
+System architecture:
+
+📘 [docs/bloodhound_v2_plan.md](docs/bloodhound_v2_plan.md)
+
+---
 
 ---
 
@@ -394,3 +433,132 @@ To enable slash commands you must set these env vars in Lambda:
 - `SLACK_ALLOWED_USER_IDS` (optional)
 - `SLACK_ALLOWED_CHANNEL_IDS` (optional)
 - `SLACK_DESTROY_CONFIRM_TOKEN` (default `CONFIRM`)
+
+## Validation Scripts
+
+Bloodhound includes automation scripts that help engineers quickly
+verify the infrastructure deployment and teardown pipeline.
+
+These scripts are located in:
+
+tools/
+
+### Validation Workflow
+
+Bloodhound also provides an automated validation workflow that runs the
+available validation tools in the correct order.
+
+Run:
+
+tools/run_validation_workflow.sh
+
+This script orchestrates the following validation stages:
+
+1. Lambda infrastructure smoke test
+2. Controlled teardown validation
+
+The workflow verifies that:
+
+- the Lambda deployment is healthy
+- environment variables match the expected configuration
+- Slack commands are correctly routed to Lambda
+- the teardown pipeline can safely delete resources
+
+This provides a fast way to confirm that the full Bloodhound deployment
+is functioning correctly after infrastructure changes.
+
+Typical usage after deploying infrastructure:
+
+terraform apply
+tools/run_validation_workflow.sh
+
+Smoke Test
+tools/smoke_test_lambda.sh
+
+This script performs a quick health check of the deployed Lambda.
+
+It verifies:
+
+Lambda function exists
+
+environment variables are present
+
+CloudWatch log group exists
+
+Lambda Function URL is configured
+
+This script is useful immediately after running:
+
+terraform apply
+
+It detects most deployment problems within seconds.
+
+Controlled Teardown Validation
+tools/validate_teardown.sh
+
+This script automates the teardown validation procedure described in:
+
+docs/validate_teardown.md
+
+The script:
+
+creates a disposable EC2 instance
+
+captures the instance ID
+
+prompts the engineer to run /seek
+
+prompts the engineer to run /seek_destroy CONFIRM
+
+verifies that the instance was deleted
+
+restores Bloodhound to safe mode
+
+This test confirms the full teardown pipeline:
+
+Slack → Lambda → AWS API → resource deletion.
+
+Optional Log Streaming
+
+During validation, Lambda execution logs can be streamed live using:
+
+aws logs tail /aws/lambda/BloodhoundLambdaV2 \
+--region us-west-2 \
+--follow
+
+This allows engineers to observe the execution path of:
+
+/seek
+/seek_destroy
+
+in real time.
+
+Environment configuration validation
+
+The smoke test also verifies that critical Lambda environment variables
+match the local `.env` configuration.
+
+This prevents common deployment mistakes such as:
+
+- Terraform not applied after `.env` changes
+- Lambda environment variables edited manually
+- CI/CD deploying outdated configuration
+
+If a mismatch is detected, the script will stop immediately and
+display the conflicting values.
+
+5. Example Failure Output
+
+Example when Terraform is stale:
+
+Checking Lambda environment variables...
+
+Comparing critical environment variables with .env...
+
+ERROR: Environment variable mismatch
+
+Variable: APPLY_CHANGES
+Expected: false
+Actual:   true
+
+Terraform deployment may be out of sync.

@@ -80,3 +80,9 @@ terraform.rc
 
 # Lambda local test output
 output.txt
+
+# Ignore Validation logs (these can be large and are not needed in version control)
+logs/validation/*.log
+
+# However, we want to keep the validation history log, which tracks past validation runs and their results.
+!logs/validation_history.log
