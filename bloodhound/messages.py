@@ -178,8 +178,35 @@ def format_teardown_plan_message(
     targets_filter_count: int,
     allow_all: bool,
 ) -> str:
-    header = "*Bloodhound v2 — Teardown Plan (APPLY MODE)*" if apply_changes else "*Bloodhound v2 — Teardown Plan (dry-run)*"
-    lines = [header, _fmt_kv("time_et", _et_now_time_str()), ""]
+    # Determine execution mode for Slack output.
+    # This ensures the Header and Slack messages clearly shows whether Bloodhound
+    # is running in dry-run, simulation, or real deletion mode.
+    if not apply_changes:
+        header = "*Bloodhound v2 — Teardown Plan (DRY RUN)*"
+        mode_text = "DRY RUN — No AWS resources will be deleted"
+
+    elif simulate:
+        header = "*Bloodhound v2 — Teardown Plan (SIMULATION)*"
+        mode_text = "SIMULATION — Deletion calls are simulated"
+
+    else:
+        header = "*Bloodhound v2 — Teardown Plan (DESTRUCTIVE APPLY)*"
+        mode_text = "APPLY (DESTRUCTIVE) — Resources WILL be deleted"
+
+    # Slack message header
+    #header = "*Bloodhound v2 — Teardown Plan*"
+
+    # First lines of the Slack report
+    lines = [
+        header,
+        _fmt_kv("mode", f"`{mode_text}`"),
+        _fmt_kv("time_et", _et_now_time_str()),
+        ""
+    ]
+
+    # Extra safety visibility for dry-run
+    if not apply_changes:
+        lines.append("🚨 *DRY RUN MODE* — No AWS resources will be deleted")
 
     targets_filter_active = targets_filter_count > 0
     lines.append(_fmt_kv("simulate", f"`{str(simulate).lower()}`"))
@@ -189,19 +216,61 @@ def format_teardown_plan_message(
     lines.append(_fmt_kv("allow_all_targets", f"`{str(allow_all).lower()}`"))
     lines.append("")
 
+    # Visual divider between execution configuration and deletion summary
+    lines.append("────────")
+    lines.append("")
+
     if not actions:
         lines.append("No deletions planned.")
         return "\n".join(lines)
 
+    # Total number of API operations Bloodhound plans to execute
     lines.append(_fmt_kv("planned_actions", f"`{len(actions)}`"))
+    lines.append("")
 
+    # Aggregate counts by AWS action, service, and region
     by_action = defaultdict(int)
     by_service = defaultdict(int)
+    by_region = defaultdict(int)
+
+    # Count how many planned actions belong to each service, API action, and region
     for a in actions:
         by_action[a.action] += 1
         by_service[a.service] += 1
-    lines.append(_fmt_kv("planned_by_service", "`" + ", ".join([f"{k}={by_service[k]}" for k in sorted(by_service.keys())]) + "`"))
-    lines.append(_fmt_kv("planned_by_action", "`" + ", ".join([f"{k}={by_action[k]}" for k in sorted(by_action.keys())]) + "`"))
+        by_region[a.region] += 1
+
+    # ------------------------------------------------------------
+    # Regions most affected by the teardown plan
+    # ------------------------------------------------------------
+    lines.append("*Top Regions Affected*")
+
+    # Sort regions by number of actions (largest first)
+    for region, count in sorted(by_region.items(), key=lambda x: x[1], reverse=True):
+        lines.append(f"- `{region}`: `{count}`")
+
+    lines.append("")
+
+
+    # ------------------------------------------------------------
+    # Summary by AWS service (ec2, elbv2, rds, etc.) affected by the teardown plan.
+    # ------------------------------------------------------------
+    lines.append("*Services affected*")
+    #lines.append("`" + ", ".join([f"{k}={by_service[k]}" for k in sorted(by_service.keys())]) + "`")
+    # Render services vertically for easier Slack scanning
+    for svc in sorted(by_service.keys()):
+        lines.append(f"- `{svc}`: `{by_service[svc]}`")
+
+    lines.append("")
+
+
+    # ------------------------------------------------------------
+    # Summary by AWS API action (terminate, delete, release, etc.)
+    # ------------------------------------------------------------
+    lines.append("*Planned Actions*")
+
+    # Render each action count on its own line for easier Slack scanning
+    for action in sorted(by_action.keys()):
+        lines.append(f"- `{action}`: `{by_action[action]}`")
 
     # Keep Slack output short: show a small sample.
     sample = actions[:15]
@@ -224,6 +293,120 @@ def format_teardown_result_message(attempted: int, succeeded: int, failed: int, 
     lines.append(_fmt_kv("succeeded", f"`{succeeded}`"))
     lines.append(_fmt_kv("failed", f"`{failed}`"))
     lines.append(_fmt_kv("simulated", f"`{simulated}`"))
+    return "\n".join(lines)
+
+def format_status_message(
+    *,
+    health: str,
+    apply_changes: bool,
+    simulate: bool,
+    max_delete_count: int,
+    expected_account_id: str,
+    account_verified: bool,
+    last_scan_resource_total: int,
+    last_scan_whitelisted_total: int,
+    regions_scanned: int,
+):
+    """
+    Format a Slack status report for the Bloodhound system.
+
+    This message is used by the `/v2_status` Slack command to provide
+    engineers with a quick operational overview of the system state.
+
+    Args:
+    health:
+        System health indicator used by the operational dashboard.
+
+        Possible values:
+        🟢 healthy
+        🟡 warning
+        🔴 critical
+
+        This value is computed in `app.py` based on destructive mode,
+        deletion safety limits, and other operational signals.
+
+    apply_changes:
+        Whether Bloodhound is allowed to perform destructive operations.
+
+    simulate:
+        Whether teardown operations are currently simulated.
+
+    max_delete_count:
+        Maximum number of resources allowed to be deleted in a single run.
+
+    expected_account_id:
+        AWS account ID that Bloodhound expects to operate within.
+
+    account_verified:
+        Whether the runtime AWS account matches the expected account ID.
+
+    last_scan_resource_total:
+        Total number of resources discovered during the most recent scan.
+
+    last_scan_whitelisted_total:
+        Number of resources that were protected (whitelisted) during the scan.
+
+    regions_scanned:
+        Total number of AWS regions included in the most recent scan.
+
+    Returns:
+        Slack-formatted string representing the Bloodhound operational
+        status dashboard used by the `/v2_status` command.
+    """
+
+    # ------------------------------------------------------------
+    # Determine execution mode
+    # ------------------------------------------------------------
+    if not apply_changes:
+        mode = "DRY RUN"
+    elif simulate:
+        mode = "SIMULATION"
+    else:
+        mode = "DESTRUCTIVE APPLY"
+
+    candidate_for_deletion = last_scan_resource_total - last_scan_whitelisted_total
+
+    lines: list[str] = []
+
+    lines.append("*Bloodhound v2 — System Status*")
+    lines.append(_fmt_kv("system_health", f"`{health}`"))
+    lines.append(_fmt_kv("time_et", _et_now_time_str()))
+    lines.append("")
+
+    # ------------------------------------------------------------
+    # System mode
+    # ------------------------------------------------------------
+    lines.append("*System Mode*")
+    lines.append(_fmt_kv("mode", f"`{mode}`"))
+    lines.append(_fmt_kv("apply_changes", f"`{str(apply_changes).lower()}`"))
+    lines.append(_fmt_kv("simulate", f"`{str(simulate).lower()}`"))
+    lines.append("")
+
+    lines.append("────────")
+    lines.append("")
+
+    """
+    # ------------------------------------------------------------
+    # Last scan summary
+    # ------------------------------------------------------------
+    lines.append("*Last Scan Summary*")
+    lines.append(_fmt_kv("regions_scanned", f"`{regions_scanned}`"))
+    lines.append(_fmt_kv("resources_found", f"`{last_scan_resource_total}`"))
+    lines.append(_fmt_kv("resources_whitelisted", f"`{last_scan_whitelisted_total}`"))
+    lines.append(_fmt_kv("resources_candidate_for_deletion", f"`{candidate_for_deletion}`"))
+    lines.append("")
+
+    lines.append("────────")
+    lines.append("")"""
+
+    # ------------------------------------------------------------
+    # Safety guards
+    # ------------------------------------------------------------
+    lines.append("*Safety Guards*")
+    lines.append(_fmt_kv("max_deletion_limit", f"`{max_delete_count}`"))
+    lines.append(_fmt_kv("expected_account_id", f"`{expected_account_id}`"))
+    lines.append(_fmt_kv("account_verified", f"`{str(account_verified).lower()}`"))
+
     return "\n".join(lines)
 
 

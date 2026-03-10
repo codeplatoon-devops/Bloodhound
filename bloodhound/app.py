@@ -30,6 +30,7 @@ from bloodhound.messages import (
     format_teardown_plan_message,
     format_teardown_result_message,
     format_whitelisted_resources_message,
+    format_status_message,
 )
 from bloodhound.scanner.regions import discover_regions, select_regions
 from bloodhound.scanner.scan_all import scan_all
@@ -38,6 +39,51 @@ from bloodhound.teardown.executor import execute_actions
 from bloodhound.teardown.planner import plan_deletions
 from bloodhound.whitelist import filter_whitelisted
 from bloodhound.types import resource_key
+
+def compute_system_health(
+    *,
+    apply_changes: bool,
+    allow_all_targets: bool,
+    max_delete_count: int,
+    budget_over_threshold: bool,
+) -> str:
+    """
+    Compute a simple system health indicator for /v2_status.
+
+    Args:
+        apply_changes:
+            Whether destructive mode is enabled.
+
+        allow_all_targets:
+            Whether teardown can target all resources.
+
+        max_delete_count:
+            Maximum number of deletions allowed per run.
+
+        budget_over_threshold:
+            Whether budget alert threshold has been triggered.
+
+    Returns:
+        str:
+            Emoji indicator representing system health:
+            🟢 healthy
+            🟡 warning
+            🔴 critical
+    """
+
+    if budget_over_threshold:
+        return "🔴"
+
+    if apply_changes and allow_all_targets:
+        return "🔴"
+
+    if apply_changes:
+        return "🟡"
+
+    if max_delete_count > 20:
+        return "🟡"
+
+    return "🟢"
 
 
 def run(event: Any, context: Any) -> dict[str, Any]:
@@ -49,13 +95,27 @@ def run(event: Any, context: Any) -> dict[str, Any]:
     # apply teardown overrides FIRST, then load config so the same invocation uses the intended flags.
     if isinstance(event, dict) and event.get("source") == "slack_command":
         mode = (event.get("mode") or "").strip()
-        # /seek = scan + reports only
+        # /seek = scan only (safe mode)
+        # - performs resource scan
+        # - generates teardown plan
+        # - no deletion allowed
         if mode == "seek":
             os.environ["APPLY_CHANGES"] = "false"
             os.environ["TEARDOWN_SIMULATE"] = "true"
             os.environ["TEARDOWN_ALLOW_ALL"] = "false"
-        # /seek_destroy = destructive mode (delete all non-whitelisted candidates)
-        elif mode == "seek_destroy":
+
+        # /seek_destroy_plan = preview teardown plan for all candidates
+        # - still safe mode
+        # - allows engineers to review what would be deleted
+        elif mode == "seek_destroy_plan":
+            os.environ["APPLY_CHANGES"] = "false"
+            os.environ["TEARDOWN_SIMULATE"] = "true"
+            os.environ["TEARDOWN_ALLOW_ALL"] = "true"
+
+        # /seek_destroy_execute = destructive teardown execution
+        # - executes real AWS deletion APIs
+        # - deletes all non-whitelisted resources
+        elif mode == "seek_destroy_execute":
             os.environ["APPLY_CHANGES"] = "true"
             os.environ["TEARDOWN_SIMULATE"] = "false"
             os.environ["TEARDOWN_ALLOW_ALL"] = "true"
@@ -76,6 +136,41 @@ def run(event: Any, context: Any) -> dict[str, Any]:
             scan_channel_id=cfg.slack.scan_channel_id,
             alert_channel_id=cfg.slack.alert_channel_id,
         )
+
+    # ------------------------------------------------------------
+    # Status command (read-only system overview)
+    # ------------------------------------------------------------
+    if isinstance(event, dict) and event.get("source") == "slack_command":
+        if event.get("mode") == "status":
+
+            health = compute_system_health(
+                apply_changes=cfg.teardown.apply_changes,
+                allow_all_targets=cfg.teardown.allow_all_targets,
+                max_delete_count=cfg.teardown.max_delete_count,
+                budget_over_threshold=False,
+            )
+
+            status_msg = format_status_message(
+                health=health,
+                apply_changes=cfg.teardown.apply_changes,
+                simulate=cfg.teardown.simulate,
+                max_delete_count=cfg.teardown.max_delete_count,
+                expected_account_id=getattr(cfg.aws, "expected_account_id", "not-configured"),
+                account_verified=True,
+                last_scan_resource_total=0,
+                last_scan_whitelisted_total=0,
+                regions_scanned=0,
+            )
+
+            if slack:
+                slack.post_alert(status_msg)
+
+            return {
+                "ok": True,
+                "mode": "status",
+            }
+
+    
 
     discovered = None
     if cfg.regions.mode == "discover":

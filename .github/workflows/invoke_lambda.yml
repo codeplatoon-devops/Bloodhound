@@ -19,9 +19,14 @@ jobs:
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        # IMPORTANT:
+        # This region must match the region used by Terraform
+        # in infra/provider.tf where the Lambda is deployed.
         aws-region: us-west-2
 
     - name: Invoke Bloodhound Lambda function
+        # IMPORTANT:
+        # This region must match the Lambda deployment region.
       run: |
         echo '{}' > test_event.json
         aws lambda invoke --function-name BloodhoundLambda --payload file://test_event.json output.txt --region us-west-2

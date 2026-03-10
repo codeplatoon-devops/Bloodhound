@@ -1,0 +1,73 @@
+{
+  "display_information": {
+    "name": "Bloodhound-V2",
+    "description": "AWS resource scanning and teardown automation (V2)",
+    "background_color": "#2E3A59"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Bloodhound-V2",
+      "always_online": false
+    },
+    "slash_commands": [
+      {
+        "command": "/seek",
+        "description": "Scan AWS resources and report results",
+        "should_escape": false,
+        "url": "https://kn5244cyenar6pzgexnrq5oh2m0ohyvb.lambda-url.us-west-2.on.aws/"
+      },
+      {
+        "command": "/seek_destroy",
+        "description": "Execute destructive cleanup (requires CONFIRM)",
+        "usage_hint": "CONFIRM",
+        "should_escape": false,
+        "url": "https://kn5244cyenar6pzgexnrq5oh2m0ohyvb.lambda-url.us-west-2.on.aws/"
+      },
+      {
+        "command": "/v2_seek",
+        "description": "Run a non-destructive AWS resource scan",
+        "should_escape": false,
+        "url": "https://kn5244cyenar6pzgexnrq5oh2m0ohyvb.lambda-url.us-west-2.on.aws/"
+      },
+      {
+        "command": "/v2_seek_destroy_plan",
+        "description": "Preview the teardown plan without deleting resources",
+        "should_escape": false,
+        "url": "https://kn5244cyenar6pzgexnrq5oh2m0ohyvb.lambda-url.us-west-2.on.aws/"
+      },
+      {
+        "command": "/v2_seek_destroy",
+        "description": "Execute destructive cleanup of non-whitelisted resources",
+        "usage_hint": "CONFIRM",
+        "should_escape": false,
+        "url": "https://kn5244cyenar6pzgexnrq5oh2m0ohyvb.lambda-url.us-west-2.on.aws/"
+      },
+      {
+        "command": "/v2_status",
+        "description": "Show Bloodhound system status and safety configuration",
+        "should_escape": false,
+        "url": "https://kn5244cyenar6pzgexnrq5oh2m0ohyvb.lambda-url.us-west-2.on.aws/"
+      }
+    ]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "chat:write",
+        "commands",
+        "channels:read",
+        "groups:read",
+        "im:read",
+        "mpim:read"
+      ]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false,
+    "interactivity": {
+      "is_enabled": false
+    }
+  }
+}
