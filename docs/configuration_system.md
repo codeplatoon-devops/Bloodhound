@@ -1,4 +1,3 @@
-
 # Bloodhound v2 Configuration Guide
 
 This document describes the configuration system used by **Bloodhound v2**, including environment variables, teardown behavior, and operational safety controls.

@@ -10,7 +10,7 @@ It is written in the same **clear operational style** as your other docs.
 
 # Slack Slash Command Troubleshooting
 
-This guide explains how to diagnose and fix situations where the **Bloodhound Slack commands (such as `/seek` or `/seek_destroy`) stop appearing or stop responding**.
+This guide explains how to diagnose and fix situations where the **Bloodhound Slack commands (such as `/v2_seek`, `/v2_seek_destroy_plan`, `/v2_seek_destroy`, or `/v2_status`) stop appearing or stop responding**.
 
 These issues typically occur after infrastructure updates or configuration changes.
 
@@ -263,11 +263,19 @@ with the workspace.
 
 Return to Slack and test the command:
 
-/seek
+/v2_seek
 
 or
 
-/seek_destroy
+/v2_seek_destroy_plan
+
+or
+
+/v2_seek_destroy
+
+or
+
+/v2_status
 
 If the reinstall succeeded, Slack should now display the command and the Lambda endpoint should receive the request.
 

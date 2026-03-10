@@ -15,8 +15,8 @@
 # Validation Workflow
 # -------------------
 # 1. Terraform creates a temporary EC2 instance
-# 2. Engineer runs `/seek` in Slack to confirm detection
-# 3. Engineer runs `/seek_destroy CONFIRM`
+# 2. Engineer runs `/v2_seek` in Slack to confirm detection
+# 3. Engineer runs `/v2_seek_destroy CONFIRM`
 # 4. Bloodhound deletes the instance
 # 5. Script verifies the instance no longer exists
 #
@@ -248,7 +248,7 @@ sleep 10
 # ------------------------------------------------------------------
 # Step 3 — Slack Scan Validation
 #
-# Engineer manually runs the Slack command /seek to confirm the
+# Engineer manually runs the Slack command /v2_seek to confirm the
 # instance appears in the scan results.
 # ------------------------------------------------------------------
 
@@ -259,12 +259,12 @@ echo "----------------------------------------"
 echo ""
 echo "Run this command in Slack:"
 echo ""
-echo "  /seek"
+echo "  /v2_seek"
 echo ""
 echo "Confirm the EC2 instance appears in the scan results."
 echo ""
 
-read -p "Press ENTER once /seek has confirmed detection..."
+read -p "Press ENTER once /v2_seek has confirmed detection..."
 
 # ------------------------------------------------------------------
 # Deletion Safety Guard
@@ -309,7 +309,7 @@ echo "----------------------------------------"
 echo ""
 echo "Run the destroy command in Slack:"
 echo ""
-echo "  /seek_destroy CONFIRM"
+echo "  /v2_seek_destroy CONFIRM"
 echo ""
 
 read -p "Press ENTER once Slack shows teardown results..."

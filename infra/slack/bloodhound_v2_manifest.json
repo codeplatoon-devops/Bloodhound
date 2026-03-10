@@ -25,7 +25,13 @@
       },
       {
         "command": "/v2_seek",
-        "description": "Run a non-destructive AWS scan",
+        "description": "Run a non-destructive AWS resource scan",
+        "should_escape": false,
+        "url": "https://kn5244cyenar6pzgexnrq5oh2m0ohyvb.lambda-url.us-west-2.on.aws/"
+      },
+      {
+        "command": "/v2_seek_destroy_plan",
+        "description": "Preview the teardown plan without deleting resources",
         "should_escape": false,
         "url": "https://kn5244cyenar6pzgexnrq5oh2m0ohyvb.lambda-url.us-west-2.on.aws/"
       },
@@ -37,8 +43,8 @@
         "url": "https://kn5244cyenar6pzgexnrq5oh2m0ohyvb.lambda-url.us-west-2.on.aws/"
       },
       {
-        "command": "/v2_seek_destroy_plan",
-        "description": "Preview the teardown plan without deleting resources",
+        "command": "/v2_status",
+        "description": "Show Bloodhound system status and safety configuration",
         "should_escape": false,
         "url": "https://kn5244cyenar6pzgexnrq5oh2m0ohyvb.lambda-url.us-west-2.on.aws/"
       }

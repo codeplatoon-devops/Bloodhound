@@ -12,6 +12,32 @@ All Slack app settings must be applied from this manifest to ensure reproducibil
 
 ---
 
+## Bloodhound Slack Command Interface
+
+Bloodhound exposes both legacy and versioned commands.
+
+Legacy compatibility commands:
+
+/seek
+    Run AWS resource scan
+
+/seek_destroy CONFIRM
+    Execute destructive teardown
+
+Preferred V2 commands:
+
+/v2_seek
+    Run AWS resource scan
+
+/v2_seek_destroy_plan
+    Preview teardown plan
+
+/v2_seek_destroy CONFIRM
+    Execute destructive teardown
+
+/v2_status
+    Show system status and safety configuration
+
 ## Manifest Structure Overview
 
 ### display_information
@@ -43,14 +69,30 @@ No presence spoofing is enabled.
 
 ### features.slash_commands
 
-Defines supported commands:
+Bloodhound supports both **legacy commands** and **versioned v2 commands**.
+
+Legacy commands (kept for compatibility):
 
 - `/seek` — Non-destructive AWS scan.
-- `/seek_destroy` — Destructive scan (gated by confirmation token and Lambda safety rails).
+- `/seek_destroy CONFIRM` — Execute destructive cleanup.
+
+Preferred v2 command interface:
+
+- `/v2_seek` — Non-destructive AWS resource scan.
+- `/v2_seek_destroy_plan` — Preview the teardown plan without deleting resources.
+- `/v2_seek_destroy CONFIRM` — Execute destructive cleanup of non-whitelisted resources.
+- `/v2_status` — Show Bloodhound system status and safety configuration.
 
 Important:
-The `url` field is a placeholder during setup.
+
+The `url` field is a placeholder during setup.  
 After Lambda deployment, it must be updated to the Lambda Function URL.
+
+Note:
+
+The `/seek_destroy` and `/v2_seek_destroy` commands require the confirmation token `CONFIRM`.  
+Slack sends this token as command text, and Bloodhound validates it before
+executing destructive operations.
 
 ---
 
@@ -94,10 +136,47 @@ Without review.
 
 ## Architectural Notes
 
-- Slack only triggers execution.
-- All scanning and deletion logic lives inside AWS Lambda.
-- Destructive behavior is gated by environment variables and confirmation tokens.
-- Slack never performs deletion directly.
+Slack commands provide the operational interface for Bloodhound.
+
+Command flow:
+
+Slack → Lambda Function URL → bloodhound.slack_commands → bloodhound.app
+
+Supported operational commands:
+
+Legacy (v1 compatibility)
+
+/seek
+    Run AWS resource scan
+
+/seek_destroy CONFIRM
+    Execute destructive teardown
+
+Preferred V2 interface
+
+/v2_seek
+    Run AWS resource scan
+
+/v2_seek_destroy_plan
+    Preview teardown plan
+
+/v2_seek_destroy CONFIRM
+    Execute destructive teardown
+
+/v2_status
+    Show system health and configuration
+
+Slack only triggers execution.  
+
+All scanning and deletion logic lives inside AWS Lambda.
+
+Destructive behavior is gated by:
+
+- confirmation token (`CONFIRM`)
+- environment variables
+- Lambda safety rails
+
+Slack never performs deletion directly.
 
 ---
 
@@ -108,13 +187,26 @@ Allowed changes without review:
 - Slash command descriptions
 
 Changes requiring review:
-- Adding scopes
+
+- Adding OAuth scopes
 - Enabling socket mode
 - Enabling token rotation
 - Enabling interactivity
-- Adding new commands
+- Adding new slash commands beyond the current interface
 
----
+Current supported command set:
+
+Legacy compatibility:
+
+/seek
+/seek_destroy CONFIRM
+
+Preferred V2 interface:
+
+/v2_seek
+/v2_seek_destroy_plan
+/v2_seek_destroy CONFIRM
+/v2_status
 
 ---
 

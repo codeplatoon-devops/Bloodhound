@@ -101,6 +101,13 @@ def handle_slack_command_http(event: dict[str, Any]) -> dict[str, Any]:
     if cmd.command in ("/v2_seek_destroy_plan",):
         _invoke_worker(mode="seek", cmd=cmd)
         return _http_text(200, "Generating teardown preview...please stand by.")
+    
+    # ------------------------------------------------------------
+    # System status command
+    # ------------------------------------------------------------
+    if cmd.command in ("/v2_status",):
+        _invoke_worker(mode="status", cmd=cmd)
+        return _http_text(200, "Fetching Bloodhound system status...")
 
     # Destructive teardown command
     if cmd.command in ("/seek_destroy", "/v2_seek_destroy"):

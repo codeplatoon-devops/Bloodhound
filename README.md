@@ -424,8 +424,10 @@ It invokes:
 
 Slash commands require a publicly reachable HTTPS endpoint. For v2 we recommend a **Lambda Function URL** (one endpoint) and route based on the Slack `command` field.
 
-- `/seek` runs scan + reports (non-destructive)
-- `/seek_destroy CONFIRM` runs destructive mode (deletes all non-whitelisted candidates we scan for)
+- `/v2_seek` runs scan + reports (non-destructive)
+- `/v2_seek_destroy_plan` previews the teardown plan
+- `/v2_seek_destroy CONFIRM` runs destructive cleanup (deletes all non-whitelisted candidates)
+- `/v2_status` shows the current Bloodhound system status
 
 To enable slash commands you must set these env vars in Lambda:
 

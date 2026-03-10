@@ -74,19 +74,17 @@ If the smoke test fails, fix the deployment before continuing.
 
 During teardown validation the script will pause and instruct you to run Slack commands.
 
-You will be prompted to run:
+YYou will be prompted to run:
 
-```
-/seek
-```
+`/v2_seek`
 
-This verifies Bloodhound can **detect the temporary test resource**.
+(Optional) You may preview the teardown plan before execution:
+
+`/v2_seek_destroy_plan`
 
 After confirming detection, the script will prompt you to run:
 
-```
-/seek_destroy CONFIRM
-```
+`/v2_seek_destroy CONFIRM`
 
 This command tells Bloodhound to **execute the teardown plan**.
 
@@ -94,7 +92,15 @@ This command tells Bloodhound to **execute the teardown plan**.
 
 ## Validate Lambda Health Endpoint
 
+Optional system status verification:
+
+/v2_status
+
+This command returns the Bloodhound system status including
+execution mode, deletion safety limits, and recent scan results.
+
 Before testing Slack integrations, confirm the Lambda service is reachable.
+
 
 curl https://YOUR_LAMBDA_URL/health
 
@@ -107,6 +113,7 @@ Expected response:
 }
 
 This check verifies the Lambda deployment without triggering a scan.
+
 
 # Step 3 — Automatic Deletion Verification
 
@@ -210,7 +217,7 @@ The validation workflow confirms the following systems work together:
 
 # Expected Slack Output
 
-When `/seek_destroy CONFIRM` runs successfully, Slack will show a message similar to:
+When `/v2_seek_destroy CONFIRM` runs successfully, Slack will show a message similar to:
 
 ```
 Bloodhound v2 — Teardown Results

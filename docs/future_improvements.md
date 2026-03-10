@@ -267,3 +267,178 @@ Examples include:
 * improving observability and structured logging
 
 
+Yes — adding a **reminder section for the AWS account guard** in that document is a very good idea. It belongs alongside the other **post-stabilization hardening tasks** because it’s a **runtime safety control** and not required to stabilize V2.
+
+Below is a section you can **append to your document** in the same style and structure you are already using.
+
+---
+
+# 8. Implement AWS Account Runtime Guard
+
+### Current State
+
+Bloodhound v2 includes **documentation and validation-script guards** that verify the AWS account ID before executing destructive operations.
+
+However, the **Lambda runtime itself does not yet enforce this check**.
+
+The `/v2_status` command currently displays:
+
+```
+expected_account_id: not-configured
+```
+
+This indicates that the runtime guard has not yet been connected to the configuration system.
+
+The guard is partially implemented in the codebase but has not yet been integrated into:
+
+```
+config.py
+app.py
+```
+
+---
+
+### Risks
+
+Without a runtime account guard, it is theoretically possible for Bloodhound to execute against the wrong AWS account if credentials are misconfigured.
+
+Examples:
+
+```
+running teardown against production instead of development
+running validation scripts against the wrong account
+```
+
+Other safeguards already exist (dry-run defaults, deletion limits, Terraform guards), but adding an account verification layer provides **additional defense-in-depth**.
+
+---
+
+### Target Architecture
+
+Bloodhound should verify the AWS account identity during Lambda startup before performing any scan or teardown operations.
+
+Runtime flow:
+
+```
+Lambda start
+   ↓
+Load configuration
+   ↓
+Retrieve AWS caller identity (STS)
+   ↓
+Compare to EXPECTED_AWS_ACCOUNT_ID
+   ↓
+Abort execution if mismatch
+```
+
+---
+
+### Implementation Steps
+
+1. Add environment variable:
+
+```
+EXPECTED_AWS_ACCOUNT_ID
+```
+
+Example:
+
+```
+EXPECTED_AWS_ACCOUNT_ID=123456789012
+```
+
+---
+
+2. Extend `AwsConfig` in `config.py`:
+
+```
+expected_account_id: Optional[str]
+```
+
+---
+
+3. Load the variable during configuration loading.
+
+Example:
+
+```
+expected_account_id = _env("EXPECTED_AWS_ACCOUNT_ID")
+```
+
+---
+
+4. Add runtime verification in `app.py` after configuration loading.
+
+Example logic:
+
+```
+sts = clients.sts
+identity = sts.get_caller_identity()
+runtime_account_id = identity["Account"]
+
+if expected_account_id and runtime_account_id != expected_account_id:
+    abort execution
+```
+
+---
+
+5. Update `/v2_status` to display:
+
+```
+expected_account_id
+runtime_account_id
+account_verified
+```
+
+Example output:
+
+```
+Safety Guards
+
+max_deletion_limit: 5
+expected_account_id: 123456789012
+runtime_account_id: 123456789012
+account_verified: true
+```
+
+---
+
+### Benefits
+
+This guard prevents infrastructure automation from operating in the wrong AWS account.
+
+It is particularly valuable in environments with multiple accounts such as:
+
+```
+development
+staging
+production
+```
+
+This mechanism is commonly used in internal cloud automation systems to provide an additional safety layer before destructive operations.
+
+---
+
+### Deployment Timing
+
+This change should be implemented **after V2 stability is confirmed**.
+
+It introduces additional AWS API calls (`sts:GetCallerIdentity`) and runtime checks, which were intentionally deferred during the V2 migration to minimize moving parts.
+
+---
+
+# Resulting Safety Architecture
+
+Once implemented, Bloodhound will include the following independent safety mechanisms:
+
+```
+Slack confirmation guard
+Deletion limit guard
+Terraform destructive-mode guard
+Validation script account guard
+Runtime AWS account verification
+```
+
+This creates a **defense-in-depth safety model** for automated infrastructure cleanup.
+
+

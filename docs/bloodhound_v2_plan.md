@@ -14,7 +14,7 @@ Bloodhound v2 is already deployed as a **new** Lambda (`BloodhoundLambdaV2`) so 
 ### Invocation paths
 
 - **Scheduled**: GitHub Actions can invoke `BloodhoundLambdaV2` on a cadence.
-- **On-demand**: Slack slash commands (`/seek`, `/seek_destroy`) hit a **Lambda Function URL**.
+- **On-demand**: Slack slash commands (`/v2_seek`, `/v2_seek_destroy_plan`, `/v2_seek_destroy CONFIRM`, `/v2_status`) hit a **Lambda Function URL**.
 
 ### What it scans (per region)
 
@@ -261,8 +261,10 @@ Defaults (as implemented)
 
 - ~~Function URL entrypoint~~
 - ~~Signature verification + replay protection~~
-- ~~`/seek` (non-destructive)~~
-- ~~`/seek_destroy CONFIRM` (destructive, guarded)~~
+- ~~`/v2_seek` (non-destructive scan)~~
+- ~~`/v2_seek_destroy_plan` (teardown preview)~~
+- ~~`/v2_seek_destroy CONFIRM` (destructive, guarded)~~
+- ~~`/v2_status` (system status report)~~
 - ~~Optional allowlists for destroy (user/channel IDs)~~
 
 ---

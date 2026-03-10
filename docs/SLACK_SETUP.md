@@ -2,6 +2,20 @@
 
 This project uses a Slack App to post scan summaries, budget alerts, and handle slash commands.
 
+Bloodhound V2 Slack Commands
+
+/v2_seek
+    Run AWS resource scan
+
+/v2_seek_destroy_plan
+    Preview teardown plan
+
+/v2_seek_destroy CONFIRM
+    Execute destructive teardown
+
+/v2_status
+    Show system health and configuration
+
 The preferred setup method is **manifest-based configuration**, which ensures Slack app settings are version-controlled and reproducible.
 
 ---
@@ -224,28 +238,37 @@ In the channel, run:
 
 ---
 
+## `/v2_status` — System Status Command
 
-## Planned Command: `/v2_status`
+The `/v2_status` command returns the current operational state of the
+Bloodhound system.
 
-The `/v2_status` command will return operational status information such as:
+This command is read-only and does not perform any AWS actions.
 
-- Lambda health
-- scan configuration
-- budget monitoring state
-- last execution summary
+The status report includes:
+
+- current execution mode (DRY RUN, SIMULATION, or DESTRUCTIVE APPLY)
+- deletion safety limits
+- AWS account verification status
+- summary of the most recent scan
 
 Example:
 
 /v2_status
 
-Response example:
+Example response:
 
-Bloodhound V2 Status
+Bloodhound v2 — System Status
 
-Service: healthy
-Lambda: active
-Budget monitor: enabled
-Last scan: 2 minutes ago
+System Mode
+mode: DRY RUN
+apply_changes: false
+simulate: true
+
+Safety Guards
+max_deletion_limit: 10
+expected_account_id: 123456789012
+account_verified: true
 
 ## Validate Slack Command Endpoint
 

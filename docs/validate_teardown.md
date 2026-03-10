@@ -15,10 +15,10 @@ This validation intentionally deletes a **temporary disposable resource**.
 This procedure should only be performed after the following validations succeed:
 
 - Infrastructure smoke test (`tools/smoke_test_lambda.sh`)
-- Slack command routing (`/seek`)
+- Slack command routing (`/v2_seek`)
 - Lambda execution confirmed
 - CloudWatch logs visible
-- `/seek_destroy` confirmation protections working
+- `/v2_seek_destroy` confirmation protections working
 - Terraform environment variables verified
 
 See:
@@ -43,8 +43,9 @@ understanding Bloodhound’s teardown safety controls.
 # Validation Overview
 ...
 Terraform → create test resource
-Slack → /seek confirms detection
-Slack → /seek_destroy CONFIRM deletes resource
+Slack → /v2_seek confirms detection
+Slack → /v2_seek_destroy_plan previews deletion plan (optional)
+Slack → /v2_seek_destroy CONFIRM deletes resource
 CLI → verify resource deletion
 
 ---
@@ -79,8 +80,8 @@ capture, and deletion verification steps automatically.
 
 Engineers only need to run the Slack commands:
 
-/seek
-/seek_destroy CONFIRM
+/v2_seek
+/v2_seek_destroy CONFIRM
 
 to complete the test.
 
@@ -153,7 +154,7 @@ This ID will be used later to verify deletion.
 Run the scan command in Slack:
 
 ```
-/seek
+/v2_seek
 ```
 
 Expected result:
@@ -179,6 +180,14 @@ bloodhound:keep=true
 ```
 
 ---
+
+Optional verification:
+
+Preview the teardown plan before executing destructive mode:
+
+/v2_seek_destroy_plan
+
+The disposable test instance should appear in the teardown preview.
 
 # Step 4 — Enable Apply Mode (Temporary)
 
@@ -251,7 +260,7 @@ This enables real teardown execution.
 Run the destroy command in Slack:
 
 ```
-/seek_destroy CONFIRM
+/v2_seek_destroy CONFIRM
 ```
 
 Expected Slack output:
@@ -328,7 +337,7 @@ When teardown executes, CloudWatch logs should show something similar to:
 ```
 START RequestId
 Received Slack slash command
-command=/seek_destroy
+command=/v2_seek_destroy
 Building teardown plan
 Executing deletion
 Deleting EC2 instance
@@ -351,8 +360,8 @@ aws logs tail /aws/lambda/BloodhoundLambdaV2 \
 
 This validation is successful when:
 
-* `/seek` detects the test EC2 instance
-* `/seek_destroy CONFIRM` executes without safety errors
+* `/v2_seek` detects the test EC2 instance
+* `/v2_seek_destroy CONFIRM` executes without safety errors
 * Slack reports the deletion
 * AWS CLI confirms the instance no longer exists
 * Lambda logs show the teardown executor path
