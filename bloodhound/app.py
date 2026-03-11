@@ -39,6 +39,13 @@ from bloodhound.teardown.executor import execute_actions
 from bloodhound.teardown.planner import plan_deletions
 from bloodhound.whitelist import filter_whitelisted
 from bloodhound.types import resource_key
+from bloodhound.handlers.slack_handler import handle_slack_event
+from bloodhound.handlers.validation_handler import handle_validation_event
+from bloodhound.handlers.scheduled_handler import handle_scheduled_event
+from bloodhound.services.status_service import handle_status_command
+from bloodhound.services.scan_service import scan_resources
+from bloodhound.services.budget_service import compute_budget
+from bloodhound.services.teardown_service import plan_teardown, execute_teardown
 
 def compute_system_health(
     *,
@@ -86,39 +93,24 @@ def compute_system_health(
     return "🟢"
 
 
-def run(event: Any, context: Any) -> dict[str, Any]:
+def execute_pipeline(event):
     """
-    Main orchestration entrypoint for Lambda and local testing.
-    Returns a small JSON-serializable summary for `aws lambda invoke`.
+    Core Bloodhound operational pipeline.
+
+    This function performs the full orchestration workflow:
+
+        1. Load configuration
+        2. Create AWS clients
+        3. Scan resources across regions
+        4. Apply whitelist filtering
+        5. Generate Slack scan reports
+        6. Compute budget projections
+        7. Plan teardown actions
+        8. Optionally execute deletion actions
+
+    Separating this pipeline from the Lambda entrypoint keeps the
+    application architecture maintainable as the system grows.
     """
-    # Slack slash command worker mode:
-    # apply teardown overrides FIRST, then load config so the same invocation uses the intended flags.
-    if isinstance(event, dict) and event.get("source") == "slack_command":
-        mode = (event.get("mode") or "").strip()
-        # /seek = scan only (safe mode)
-        # - performs resource scan
-        # - generates teardown plan
-        # - no deletion allowed
-        if mode == "seek":
-            os.environ["APPLY_CHANGES"] = "false"
-            os.environ["TEARDOWN_SIMULATE"] = "true"
-            os.environ["TEARDOWN_ALLOW_ALL"] = "false"
-
-        # /seek_destroy_plan = preview teardown plan for all candidates
-        # - still safe mode
-        # - allows engineers to review what would be deleted
-        elif mode == "seek_destroy_plan":
-            os.environ["APPLY_CHANGES"] = "false"
-            os.environ["TEARDOWN_SIMULATE"] = "true"
-            os.environ["TEARDOWN_ALLOW_ALL"] = "true"
-
-        # /seek_destroy_execute = destructive teardown execution
-        # - executes real AWS deletion APIs
-        # - deletes all non-whitelisted resources
-        elif mode == "seek_destroy_execute":
-            os.environ["APPLY_CHANGES"] = "true"
-            os.environ["TEARDOWN_SIMULATE"] = "false"
-            os.environ["TEARDOWN_ALLOW_ALL"] = "true"
 
     # Load configuration from env/.env and validate required fields.
     cfg = load_config()
@@ -137,131 +129,31 @@ def run(event: Any, context: Any) -> dict[str, Any]:
             alert_channel_id=cfg.slack.alert_channel_id,
         )
 
-    # ------------------------------------------------------------
-    # Status command (read-only system overview)
-    # ------------------------------------------------------------
-    if isinstance(event, dict) and event.get("source") == "slack_command":
-        if event.get("mode") == "status":
+    status_response = handle_status_command(event, cfg, slack, compute_system_health)
+    if status_response:
+        return status_response
 
-            health = compute_system_health(
-                apply_changes=cfg.teardown.apply_changes,
-                allow_all_targets=cfg.teardown.allow_all_targets,
-                max_delete_count=cfg.teardown.max_delete_count,
-                budget_over_threshold=False,
-            )
+    scan_result = scan_resources(cfg, clients, slack)
 
-            status_msg = format_status_message(
-                health=health,
-                apply_changes=cfg.teardown.apply_changes,
-                simulate=cfg.teardown.simulate,
-                max_delete_count=cfg.teardown.max_delete_count,
-                expected_account_id=getattr(cfg.aws, "expected_account_id", "not-configured"),
-                account_verified=True,
-                last_scan_resource_total=0,
-                last_scan_whitelisted_total=0,
-                regions_scanned=0,
-            )
+    budget_snapshot = compute_budget(cfg, clients, slack)
 
-            if slack:
-                slack.post_alert(status_msg)
+    actions = plan_teardown(cfg, event, scan_result["all_candidates"], slack)
 
-            return {
-                "ok": True,
-                "mode": "status",
-            }
-
-    
-
-    discovered = None
-    if cfg.regions.mode == "discover":
-        discovered = discover_regions(clients)
-    regions = select_regions(cfg.regions.mode, cfg.regions.regions, discovered_regions=discovered)
-
-    # 1) Scan
-    raw_by_region = scan_all(clients, regions=regions, rds_final_snapshot=cfg.teardown.rds_final_snapshot)
-    candidates_by_region: dict[str, list] = {}
-    kept_by_region: dict[str, list] = {}
-
-    for region, records in raw_by_region.items():
-        # Whitelist is applied before teardown planning.
-        candidates, kept = filter_whitelisted(records, cfg.whitelist)
-        candidates_by_region[region] = candidates
-        kept_by_region[region] = kept
-
-    scan_msg = format_scan_message(candidates_by_region, kept_by_region)
-    if slack:
-        slack.post_scan(scan_msg)
-        slack.post_scan(format_whitelisted_resources_message(kept_by_region))
-
-    # 2) Budget
-    budget_snapshot = compute_budget_snapshot(
+    exec_summary = execute_teardown(
+        cfg,
+        event,
         clients,
-        cohort_start_yyyy_mm=cfg.budget.cohort_start_yyyy_mm,
-        cohort_total_budget_usd=cfg.budget.cohort_total_budget_usd,
-        cohort_length_months=cfg.budget.cohort_length_months,
-        budget_over_days=cfg.budget.budget_over_days,
+        actions,
+        slack,
+        resource_key_from_action
     )
-    budget_msg = format_budget_message(budget_snapshot)
-    # Always post budget summary to alert channel (keeps scan channel quieter).
-    if slack:
-        slack.post_alert(budget_msg)
 
-    # 3) Teardown plan + optional apply
-    all_candidates = [r for region in sorted(candidates_by_region.keys()) for r in candidates_by_region[region]]
-    actions, _manual = plan_deletions(all_candidates)
-    if slack:
-        slack.post_alert(
-            format_teardown_plan_message(
-                actions,
-                apply_changes=cfg.teardown.apply_changes,
-                simulate=cfg.teardown.simulate,
-                targets_filter_count=len(cfg.teardown.target_ids),
-                allow_all=cfg.teardown.allow_all_targets,
-            )
-        )
-
-    exec_summary = None
-    if cfg.teardown.apply_changes:
-        actions_to_execute = actions
-        if cfg.teardown.target_ids:
-            targets = cfg.teardown.target_ids
-            actions_to_execute = [
-                a
-                for a in actions
-                if (a.id in targets) or (a.arn and a.arn in targets) or (resource_key_from_action(a) in targets)
-            ]
-
-        exec_result = execute_actions(clients, actions_to_execute, simulate=cfg.teardown.simulate)
-        exec_summary = {
-            "attempted": exec_result.attempted,
-            "succeeded": exec_result.succeeded,
-            "failed": exec_result.failed,
-            "simulated": exec_result.simulated,
-            "failures": exec_result.failures[:20],
-            "targets_filter": sorted(cfg.teardown.target_ids) if cfg.teardown.target_ids else None,
-            "planned_actions_total": len(actions),
-            "executed_actions_total": len(actions_to_execute),
-            "allow_all_targets": cfg.teardown.allow_all_targets,
-        }
-        if slack:
-            slack.post_alert(
-                format_teardown_result_message(
-                    attempted=exec_result.attempted,
-                    succeeded=exec_result.succeeded,
-                    failed=exec_result.failed,
-                    simulated=exec_result.simulated,
-                )
-                + "\n"
-                + json.dumps(exec_summary, indent=2)
-            )
-
-    # Return a compact summary to Lambda invoke callers.
     return {
         "ok": True,
-        "regions": regions,
+        "regions": scan_result["regions"],
         "scan": {
-            "candidates_total": sum(len(v) for v in candidates_by_region.values()),
-            "kept_total": sum(len(v) for v in kept_by_region.values()),
+            "candidates_total": sum(len(v) for v in scan_result["candidates_by_region"].values()),
+            "kept_total": sum(len(v) for v in scan_result["kept_by_region"].values()),
         },
         "budget": {
             "projected_month_end_spend_usd": budget_snapshot.projected_month_end_spend_usd,
@@ -276,6 +168,35 @@ def run(event: Any, context: Any) -> dict[str, Any]:
             "execution": exec_summary,
         },
     }
+
+def run(event, context):
+    """
+    Main orchestration entrypoint for Lambda and local testing.
+    Returns a small JSON-serializable summary for `aws lambda invoke`.
+
+    The run() function now acts as a thin orchestrator that prepares
+    the runtime environment and then delegates execution to the
+    Bloodhound pipeline.
+    """
+
+    # ------------------------------------------------------------
+    # Prepare runtime environment based on invocation source
+    #
+    # Slack commands and validation harnesses modify environment
+    # variables so the pipeline behaves in the correct mode.
+    # ------------------------------------------------------------
+
+    if isinstance(event, dict) and event.get("source") == "slack_command":
+        handle_slack_event(event)
+
+    if isinstance(event, dict) and event.get("source") == "validation":
+        handle_validation_event(event)
+
+    # ------------------------------------------------------------
+    # Execute the core Bloodhound pipeline
+    # ------------------------------------------------------------
+
+    return execute_pipeline(event)
 
 
 def resource_key_from_action(a) -> str:

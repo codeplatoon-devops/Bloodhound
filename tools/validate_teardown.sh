@@ -52,6 +52,28 @@ fi
 set -e
 
 # ------------------------------------------------------------------
+# Validation Mode Configuration
+#
+# Default behavior:
+#   automated validation (CI/CD safe)
+#
+# Optional:
+#   --manual enables Slack confirmation steps so engineers can
+#   visually verify the scan and teardown plan.
+#
+# Examples:
+#
+#   ./tools/run_validation_workflow.sh
+#   ./tools/run_validation_workflow.sh --manual
+# ------------------------------------------------------------------
+
+MANUAL_MODE=false
+
+if [ "$1" == "--manual" ]; then
+  MANUAL_MODE=true
+fi
+
+# ------------------------------------------------------------------
 # Disable AWS CLI Pager
 #
 # Some AWS CLI commands automatically open output in a pager
@@ -250,21 +272,38 @@ sleep 10
 #
 # Engineer manually runs the Slack command /v2_seek to confirm the
 # instance appears in the scan results.
+
+
+echo ""
+echo "----------------------------------------"
+log "Scan Confirmation Step"
+echo "----------------------------------------"
+echo ""
+
+# ------------------------------------------------------------------
+# Manual verification mode
+#
+# Engineers can observe the scan results via Slack before
+# continuing the validation workflow.
 # ------------------------------------------------------------------
 
-echo ""
-echo "----------------------------------------"
-log "Manual Step Required"
-echo "----------------------------------------"
-echo ""
-echo "Run this command in Slack:"
-echo ""
-echo "  /v2_seek"
-echo ""
-echo "Confirm the EC2 instance appears in the scan results."
-echo ""
+if [ "$MANUAL_MODE" = true ]; then
 
-read -p "Press ENTER once /v2_seek has confirmed detection..."
+  echo "Run this command in Slack:"
+  echo ""
+  echo "  /v2_seek"
+  echo ""
+  echo "Confirm the EC2 instance appears in the scan results."
+  echo ""
+
+  read -p "Press ENTER once /v2_seek has confirmed detection..."
+
+else
+
+  echo "Skipping Slack scan confirmation (automated validation mode)."
+
+fi
+
 
 # ------------------------------------------------------------------
 # Deletion Safety Guard
@@ -304,15 +343,59 @@ fi
 
 echo ""
 echo "----------------------------------------"
-log "Manual Step Required"
+log "Triggering Bloodhound Validation Teardown"
 echo "----------------------------------------"
 echo ""
-echo "Run the destroy command in Slack:"
-echo ""
-echo "  /v2_seek_destroy CONFIRM"
-echo ""
 
-read -p "Press ENTER once Slack shows teardown results..."
+# ------------------------------------------------------------------
+# Automated validation teardown
+#
+# Instead of requiring a Slack command, the validation script
+# directly invokes the Lambda function with a validation payload.
+#
+# This ensures CI/CD pipelines can run validation automatically.
+# ------------------------------------------------------------------
+
+PAYLOAD=$(cat <<EOF
+{
+  "source": "validation",
+  "mode": "seek_destroy_validation",
+  "target_ids": ["$INSTANCE_ID"]
+}
+EOF
+)
+
+echo "Invoking Lambda validation teardown..."
+
+aws lambda invoke \
+  --function-name BloodhoundLambdaV2 \
+  --payload "$PAYLOAD" \
+  --region "$REGION" \
+  validation_result.json
+
+echo ""
+echo "Lambda response:"
+cat validation_result.json
+
+# ------------------------------------------------------------------
+# Optional Slack verification (manual mode)
+#
+# Engineers may optionally observe the teardown behavior using
+# Slack commands before the script verifies deletion.
+# This step is skipped during automated CI validation.
+# ------------------------------------------------------------------
+
+if [ "$MANUAL_MODE" = true ]; then
+
+  echo ""
+  echo "Optional verification using Slack:"
+  echo ""
+  echo "  /v2_seek_destroy CONFIRM"
+  echo ""
+
+  read -p "Press ENTER once Slack teardown results are confirmed..."
+
+fi
 
 
 # ------------------------------------------------------------------
