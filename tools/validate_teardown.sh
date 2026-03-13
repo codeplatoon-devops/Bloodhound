@@ -355,27 +355,72 @@ echo ""
 #
 # This ensures CI/CD pipelines can run validation automatically.
 # ------------------------------------------------------------------
+# ---------------------------------------------------------------
+# ---------------------------------------------------------------
+# Build validation payload
+#
+# The payload is written to /tmp so the repository directory
+# is not polluted with temporary files during validation runs.
+#
+# /tmp is safe for this purpose because:
+#
+# • files are automatically cleared by the OS eventually
+# • the file only needs to exist during this script run
+# • it avoids shell quoting issues with inline JSON
+# ---------------------------------------------------------------
 
-PAYLOAD=$(cat <<EOF
+PAYLOAD_FILE="/tmp/bloodhound_validation_payload.json"
+
+cat > "$PAYLOAD_FILE" <<EOF
 {
   "source": "validation",
   "mode": "seek_destroy_validation",
   "target_ids": ["$INSTANCE_ID"]
 }
 EOF
-)
+
 
 echo "Invoking Lambda validation teardown..."
 
+# ---------------------------------------------------------------
+# Lambda invocation result file
+#
+# Store the Lambda response in /tmp for the same reason as the
+# payload file — it is only needed during this validation run
+# and should not clutter the repository.
+# ---------------------------------------------------------------
+
+RESULT_FILE="/tmp/bloodhound_validation_result.json"
+
 aws lambda invoke \
   --function-name BloodhoundLambdaV2 \
-  --payload "$PAYLOAD" \
+  --cli-binary-format raw-in-base64-out \
+  --payload file://"$PAYLOAD_FILE" \
   --region "$REGION" \
-  validation_result.json
+  "$RESULT_FILE"
 
 echo ""
 echo "Lambda response:"
-cat validation_result.json
+cat "$RESULT_FILE"
+
+# ------------------------------------------------------------------
+# Lambda response validation
+#
+# Ensure Lambda returned a successful response before continuing.
+# If the Lambda failed internally, the validation workflow should
+# stop immediately.
+# ------------------------------------------------------------------
+
+jq -e '.ok == true' "$RESULT_FILE" >/dev/null || {
+  echo ""
+  echo "ERROR: Lambda returned failure response."
+  echo ""
+  echo "Full Lambda response:"
+  cat "$RESULT_FILE"
+  echo ""
+  exit 1
+}
+
 
 # ------------------------------------------------------------------
 # Optional Slack verification (manual mode)
@@ -397,6 +442,9 @@ if [ "$MANUAL_MODE" = true ]; then
 
 fi
 
+echo ""
+echo "Waiting for EC2 termination propagation..."
+sleep 10
 
 # ------------------------------------------------------------------
 # Step 5 — Verify Deletion

@@ -29,5 +29,5 @@ jobs:
         # This region must match the Lambda deployment region.
       run: |
         echo '{}' > test_event.json
-        aws lambda invoke --function-name BloodhoundLambdaV2 --payload file://test_event.json output.txt --region us-west-2
+        aws lambda invoke --function-name BloodhoundLambdaV2 --cli-binary-format raw-in-base64-out --payload file://test_event.json output.txt --region us-west-2
         cat output.txt
