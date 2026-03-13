@@ -92,6 +92,11 @@ def compute_system_health(
 
     return "🟢"
 
+def resource_key_from_action(a) -> str:
+    if a.arn:
+        return a.arn
+    return f"{a.service}:{a.region}:{a.id}"
+
 
 def execute_pipeline(event):
     """
@@ -186,11 +191,23 @@ def run(event, context):
     # variables so the pipeline behaves in the correct mode.
     # ------------------------------------------------------------
 
-    if isinstance(event, dict) and event.get("source") == "slack_command":
+    # Determine the event source safely.
+    # If the event is not a dictionary (which can happen in some Lambda test cases),
+    # we default the source to None so the routing logic below will simply skip.
+    source = event.get("source") if isinstance(event, dict) else None
+
+    # ------------------------------------------------------------
+    # Route the event to the appropriate handler
+    # ------------------------------------------------------------
+
+    if source == "slack_command":
         handle_slack_event(event)
 
-    if isinstance(event, dict) and event.get("source") == "validation":
+    elif source == "validation":
         handle_validation_event(event)
+
+    elif source == "scheduled":
+        handle_scheduled_event(event)
 
     # ------------------------------------------------------------
     # Execute the core Bloodhound pipeline
@@ -199,9 +216,6 @@ def run(event, context):
     return execute_pipeline(event)
 
 
-def resource_key_from_action(a) -> str:
-    if a.arn:
-        return a.arn
-    return f"{a.service}:{a.region}:{a.id}"
+
 
 

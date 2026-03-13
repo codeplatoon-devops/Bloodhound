@@ -22,6 +22,19 @@ def handle_validation_event(event):
     validation resources.
     """
 
+
+    # ------------------------------------------------------------
+    # Validation invocation guard
+    #
+    # Ensure validation mode can ONLY be triggered by the
+    # validation harness or CI workflow. Slack commands and
+    # other invocation sources must never trigger validation.
+    # ------------------------------------------------------------
+    if event.get("source") != "validation":
+        raise RuntimeError(
+            "Validation events must originate from validation harness"
+        )
+
     # ------------------------------------------------------------
     # Validate invocation mode
     # ------------------------------------------------------------

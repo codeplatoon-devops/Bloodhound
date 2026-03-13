@@ -5,7 +5,7 @@ This document verifies that Slack slash commands are correctly wired to **Bloodh
 Use this procedure after:
 - `terraform apply` succeeds
 - Slack slash command Request URLs are set to the Lambda Function URL
-- `/seek` is expected to produce Slack output
+- `/v2_seek` is expected to produce Slack output
 
 ---
 
@@ -14,8 +14,8 @@ Use this procedure after:
 - You have access to the AWS account where Bloodhound V2 is deployed.
 - You know the AWS region Bloodhound V2 is deployed in (currently `us-west-2`).
 - The Slack app is installed in the target workspace and the slash commands exist:
-  - `/seek`
-  - `/seek_destroy`
+  - `/v2_seek`
+  - `/v2_seek_destroy`
 
 ---
 
@@ -68,7 +68,7 @@ Use this procedure after:
 
 11. Run the slash command:
 
-   - `/seek`
+   - `/v2_seek`
 
 12. Confirm Slack immediately responds with a short acknowledgement message like:
 
@@ -93,7 +93,7 @@ This message indicates that Slack successfully invoked the Lambda handler and th
 
    - click refresh until you see new log lines appear
 
-17. You should see log lines that correspond to the `/seek` invocation.
+17. You should see log lines that correspond to the `/v2_seek` invocation.
 
 ---
 
@@ -101,7 +101,7 @@ This message indicates that Slack successfully invoked the Lambda handler and th
 
 You are confirming these signals:
 
-- A new log stream appears right after you run `/seek`
+- A new log stream appears right after you run `/v2_seek`
 - Log lines indicate the slash command request was received
 - Log lines indicate region scanning activity
 - Log lines indicate Slack message posting
@@ -174,14 +174,14 @@ Instead of navigating CloudWatch manually:
 
 This validation is complete when:
 
-- `/seek` produces the expected Slack output (scan summary, budget summary, teardown plan)
-- `/seek_destroy` enforces its confirmation and allowlist protections
+- `/v2_seek` produces the expected Slack output (scan summary, budget summary, teardown plan)
+- `/v2_seek_destroy` enforces its confirmation and allowlist protections
 - CloudWatch logs show a corresponding invocation and execution path
 - No destructive actions occur during validation (dry-run / simulate mode only)
 
-## Validating `/seek_destroy` Safety Controls
+## Validating `/v2_seek_destroy` Safety Controls
 
-The `/seek_destroy` command has multiple protection layers to prevent
+The `/v2_seek_destroy` command has multiple protection layers to prevent
 accidental destructive actions.
 
 During validation you should confirm these protections are functioning.
@@ -191,7 +191,7 @@ During validation you should confirm these protections are functioning.
 In Slack run:
 
 
-/seek_destroy
+/v2_seek_destroy
 
 
 Expected result:
@@ -199,7 +199,7 @@ Expected result:
 Slack should return a message similar to:
 
 
-Not allowed. Use /seek_destroy CONFIRM (and ensure you are allowlisted).
+Not allowed. Use /v2_seek_destroy CONFIRM (and ensure you are allowlisted).
 
 
 This confirms the confirmation token protection is working.
@@ -210,7 +210,7 @@ This confirms the confirmation token protection is working.
 
 Run:
 
-/seek_destroy CONFIRM
+/v2_seek_destroy CONFIRM
 
 The command may still be rejected if allowlists are configured.
 
@@ -249,8 +249,8 @@ will only generate a teardown plan and never call destructive AWS APIs.
 
 You should observe:
 
-1. `/seek_destroy` without confirmation → rejected
-2. `/seek_destroy CONFIRM` → allowed only if allowlisted
+1. `/v2_seek_destroy` without confirmation → rejected
+2. `/v2_seek_destroy CONFIRM` → allowed only if allowlisted
 3. Slack responses generated correctly
 4. Lambda invocation visible in CloudWatch logs
 5. No AWS resources are deleted
@@ -295,7 +295,7 @@ terraform apply
 
 Instead of refreshing CloudWatch in the console, you can stream Lambda
 logs directly in your terminal. This is very useful when debugging
-slash command behavior while triggering `/seek` or `/seek_destroy`.
+slash command behavior while triggering `/v2_seek` or `/v2_seek_destroy`.
 
 ### Command
 
@@ -348,13 +348,13 @@ Leave it running.
 In Slack run:
 
 ```
-/seek
+/v2_seek
 ```
 
 or
 
 ```
-/seek_destroy CONFIRM
+/v2_seek_destroy CONFIRM
 ```
 
 ---
@@ -366,7 +366,7 @@ When Lambda runs you should see logs similar to:
 ```
 START RequestId: ...
 Received Slack slash command
-command=/seek
+command=/v2_seek
 Scanning region us-east-1
 Scanning region us-west-2
 Posting Slack summary
@@ -473,11 +473,11 @@ Lambda Function URL
 
 ---
 
-### 3. `/seek_destroy` returns “Not allowed”
+### 3. `/v2_seek_destroy` returns “Not allowed”
 
 Example response:
 
-Not allowed. Use /seek_destroy CONFIRM (and ensure you are allowlisted).
+Not allowed. Use /v2_seek_destroy CONFIRM (and ensure you are allowlisted).
 
 This is expected behavior if safety checks fail.
 
@@ -505,7 +505,7 @@ Fix:
 
 Run the command again:
 
-/seek
+/v2_seek
 
 Lambda automatically creates the log group on first execution.
 
@@ -535,7 +535,7 @@ aws lambda get-function-configuration
 
 ### 6. Unexpected teardown behavior
 
-If `/seek_destroy` appears to plan more resources than expected:
+If `/v2_seek_destroy` appears to plan more resources than expected:
 
 Check the whitelist configuration:
 

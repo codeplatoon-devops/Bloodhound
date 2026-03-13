@@ -12,7 +12,7 @@ If you need to create a Slack bot from scratch, see `docs/SLACK_SETUP.md`.
 
 Project docs:
 
-- v2 plan: `docs/V2_PLAN.md`
+- v2 plan: `docs/bloodhound_v2_plan.md`
 
 ![AWS Architecture Diagram (v2)](assets/bloodhound_lambda_architecture_v2.svg)
 
@@ -22,7 +22,7 @@ Bloodhound can delete AWS infrastructure when `APPLY_CHANGES=true`.
 
 Before running validation scripts or enabling destructive mode, review:
 
-📘 [Bloodhound v2 Configuration Guide](docs/configuration.md)
+📘 [Bloodhound v2 Configuration Guide](docs/configuration_system.md)
 
 This document explains:
 
@@ -38,11 +38,11 @@ This document explains:
 
 Configuration and safety model:
 
-📘 [docs/configuration.md](docs/configuration.md)
+📘 [docs/configuration_system.md](docs/configuration_system.md)
 
 Slack command validation:
 
-📘 [docs/validate_slack_lambda.md](docs/validate_slack_lambda.md)
+📘 [docs/slack_and_lambda_validation.md](docs/slack_and_lambda_validation.md)
 
 Controlled teardown validation:
 
@@ -50,7 +50,7 @@ Controlled teardown validation:
 
 System architecture:
 
-📘 [docs/bloodhound_v2_plan.md](docs/bloodhound_v2_plan.md)
+📘 [docs/bloodhound_bloodhound_v2_plan.md](docs/bloodhound_bloodhound_v2_plan.md)
 
 ---
 
@@ -313,7 +313,30 @@ The `.build/` directory is intentionally not committed. Terraform will build the
 Deploy to a new function name so you do not touch your existing v1 Lambda:
 
 - Function name: `BloodhoundLambdaV2`
-- Handler: `handlers.lambda_function.lambda_handler`
+
+Handler: `handlers.lambda_function.lambda_handler`
+
+The Lambda handler delegates execution to the Bloodhound
+orchestration entrypoint:
+
+`bloodhound.app.run()`
+
+The `run()` function prepares the runtime environment based on the
+invocation source (Slack command, validation harness, or scheduled run)
+and then executes the core pipeline.
+
+Execution flow:
+
+Lambda handler
+   ↓
+bloodhound.app.run()
+   ↓
+event routing (Slack / validation / scheduled)
+   ↓
+execute_pipeline()
+   ↓
+scan → budget → teardown → reporting
+
 
 ### Configure Lambda environment variables
 
@@ -508,9 +531,25 @@ creates a disposable EC2 instance
 
 captures the instance ID
 
-prompts the engineer to run /seek
+prompts the engineer to run the scan command
 
-prompts the engineer to run /seek_destroy CONFIRM
+Legacy:
+
+/seek
+
+Current:
+
+/v2_seek
+
+Then prompts the engineer to run the teardown command
+
+Legacy:
+
+/seek_destroy CONFIRM
+
+Current:
+
+/v2_seek_destroy CONFIRM
 
 verifies that the instance was deleted
 
@@ -518,7 +557,13 @@ restores Bloodhound to safe mode
 
 This test confirms the full teardown pipeline:
 
-Slack → Lambda → AWS API → resource deletion.
+Execution path for destructive operations:
+
+Operator workflow:
+Slack → Lambda → AWS API → resource deletion
+
+Validation workflow:
+Validation script → Lambda → AWS API → resource deletion
 
 Optional Log Streaming
 
@@ -530,8 +575,15 @@ aws logs tail /aws/lambda/BloodhoundLambdaV2 \
 
 This allows engineers to observe the execution path of:
 
+Legacy commands:
+
 /seek
 /seek_destroy
+
+Current commands:
+
+/v2_seek
+/v2_seek_destroy
 
 in real time.
 
@@ -564,3 +616,7 @@ Expected: false
 Actual:   true
 
 Terraform deployment may be out of sync.
+
+If Slack commands stop responding after deployment, see:
+
+`docs/troubleshooting_slack_commands.md`

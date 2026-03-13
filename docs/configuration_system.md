@@ -158,14 +158,15 @@ Bloodhound includes multiple independent safety mechanisms designed to prevent a
 
 These controls operate at different layers of the system.
 
-| Safety Layer                    | Purpose                                                    |
-| ------------------------------- | ---------------------------------------------------------- |
-| Slack confirmation token        | prevents accidental teardown commands                      |
-| max deletion count              | prevents mass deletion events                              |
-| Terraform apply guard           | prevents destructive deployment configuration              |
-| Terraform account guard         | prevents deploying infrastructure in the wrong AWS account |
-| validation script account guard | prevents running validation tests in the wrong AWS account |
-| config consistency guard        | prevents invalid teardown configuration                    |
+| Safety Layer                     | Purpose                                                    |
+| -------------------------------- | ---------------------------------------------------------- |
+| Slack confirmation token         | prevents accidental teardown commands                      |
+| validation harness isolation     | restricts automated destructive tests to validation runs   |
+| max deletion count               | prevents mass deletion events                              |
+| Terraform apply guard            | prevents destructive deployment configuration              |
+| Terraform account guard          | prevents deploying infrastructure in the wrong AWS account |
+| validation script account guard  | prevents running validation tests in the wrong AWS account |
+| config consistency guard         | prevents invalid teardown configuration                    |
 
 These protections are intentionally redundant.
 
@@ -180,10 +181,15 @@ This **defense-in-depth model** is common in internal cloud automation systems.
 The teardown process follows this sequence of safety checks.
 
 ```
-Engineer
-   │
-   ▼
-Slack Command (/seek_destroy CONFIRM)
+Engineer / Validation Harness
+        │
+        ▼
+Execution Path
+   ├─ Slack Command (/v2_seek_destroy CONFIRM)
+   └─ Validation Harness Invocation
+        │
+        ▼
+Lambda Execution
    │
    ▼
 Slack Confirmation Guard
@@ -215,7 +221,7 @@ Validation procedures are documented separately.
 Slack command validation:
 
 ```
-docs/validate_slack_lambda.md
+docs/slack_and_lambda_validation.md
 ```
 
 Teardown validation workflow:

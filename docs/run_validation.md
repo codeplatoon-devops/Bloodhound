@@ -70,23 +70,32 @@ If the smoke test fails, fix the deployment before continuing.
 
 ---
 
-# Step 2 — Follow Slack Instructions
+# Step 2 — Automatic Validation Invocation
 
-During teardown validation the script will pause and instruct you to run Slack commands.
+During teardown validation the workflow will automatically invoke the
+Bloodhound Lambda function in validation mode.
 
-YYou will be prompted to run:
+The validation script performs the following steps:
 
-`/v2_seek`
+1. Creates a temporary validation resource using Terraform
+2. Captures the resource ID
+3. Invokes the Lambda function with a validation payload
 
-(Optional) You may preview the teardown plan before execution:
+Example validation event:
 
-`/v2_seek_destroy_plan`
+```json
+{
+  "source": "validation",
+  "mode": "seek_destroy_validation",
+  "target_ids": ["i-1234567890"]
+}
+```
 
-After confirming detection, the script will prompt you to run:
+The Lambda validation handler enables controlled destructive mode
+internally and restricts deletion to the provided validation targets.
 
-`/v2_seek_destroy CONFIRM`
-
-This command tells Bloodhound to **execute the teardown plan**.
+This allows the full teardown pipeline to execute automatically
+without requiring manual Slack commands.
 
 ---
 
@@ -203,15 +212,17 @@ Behavior:
 
 The validation workflow confirms the following systems work together:
 
-| Component              | Verified |
-| ---------------------- | -------- |
-| Lambda deployment      | ✓        |
-| environment variables  | ✓        |
-| Slack command routing  | ✓        |
-| resource detection     | ✓        |
-| teardown plan creation | ✓        |
-| resource deletion      | ✓        |
-| Slack reporting        | ✓        |
+The validation workflow confirms the following systems work together:
+
+| Component                       | Verified |
+| ------------------------------- | -------- |
+| Lambda deployment               | ✓        |
+| validation event routing        | ✓        |
+| environment configuration       | ✓        |
+| resource detection              | ✓        |
+| teardown plan creation          | ✓        |
+| controlled destructive teardown | ✓        |
+| Slack reporting                 | ✓        |
 
 ---
 
@@ -300,8 +311,8 @@ Always run validations in this order:
 
 ```
 1. Infrastructure smoke test
-2. Slack command validation
-3. Controlled teardown validation
+2. Validation harness invocation
+3. Controlled teardown verification
 ```
 
 This ensures problems are caught early before destructive operations are attempted.
