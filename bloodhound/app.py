@@ -156,7 +156,7 @@ def execute_pipeline(event):
         resource_key_from_action
     )
 
-    return {
+    result = {
         "ok": True,
         "regions": scan_result["regions"],
         "scan": {
@@ -176,6 +176,49 @@ def execute_pipeline(event):
             "execution": exec_summary,
         },
     }
+
+    # ------------------------------------------------------------
+    # DEBUG LOGGING
+    # ------------------------------------------------------------
+    print("Bloodhound pipeline completed")
+
+    print("Scan summary:")
+    print(
+        json.dumps(
+            {
+                "candidates_total": result["scan"]["candidates_total"],
+                "kept_total": result["scan"]["kept_total"],
+            },
+            indent=2,
+        )
+    )
+
+    print("Budget summary:")
+    print(
+        json.dumps(
+            {
+                "projected_month_end_spend_usd": result["budget"]["projected_month_end_spend_usd"],
+                "dynamic_monthly_allowance_usd": result["budget"]["dynamic_monthly_allowance_usd"],
+                "over_budget_threshold_met": result["budget"]["over_budget_threshold_met"],
+            },
+            indent=2,
+        )
+    )
+
+    print("Teardown summary:")
+    print(
+        json.dumps(
+            {
+                "apply_changes": result["teardown"]["apply_changes"],
+                "simulate": result["teardown"]["simulate"],
+                "planned_actions": result["teardown"]["planned_actions"],
+            },
+            indent=2,
+        )
+    )
+
+    return result
+
 
 def run(event, context):
     """
