@@ -1,5 +1,24 @@
 # Controlled Teardown Validation
 
+## Table of Contents
+
+- [Safety Warning](#safety-warning)
+- [Validation Overview](#validation-overview)
+- [Infrastructure Smoke Test](#infrastructure-smoke-test)
+- [Automation Script](#automation-script)
+- [Step 1 — Create Disposable Test Resource](#step-1--create-disposable-test-resource)
+- [Step 2 — Capture the Instance ID](#step-2--capture-the-instance-id)
+- [Step 3 — Verify Bloodhound Detects the Resource](#step-3--verify-bloodhound-detects-the-resource)
+- [Step 4 — Invoke Validation Mode](#step-4--invoke-validation-mode)
+- [Step 5 — Execute Teardown](#step-5--execute-teardown-automated)
+- [Step 6 — Automatic Deletion Verification](#step-6--automatic-deletion-verification)
+- [Step 7 — Restore Safe Mode](#step-7--restore-safe-mode)
+- [Step 8 — Cleanup Terraform State](#step-8--cleanup-terraform-state)
+- [Expected Lambda Log Flow](#expected-lambda-log-flow)
+- [Success Criteria](#success-criteria)
+- [When to Run This Test](#when-to-run-this-test)
+- [Related Documentation](#related-documentation)
+
 This document describes how to safely validate the **actual resource deletion path**
 in Bloodhound v2.
 

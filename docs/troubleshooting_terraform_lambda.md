@@ -1,5 +1,20 @@
 # Terraform + Lambda Troubleshooting
 
+## Table of Contents
+
+- [Lambda Runtime Import Errors](#issue-lambda-runtime-import-errors)
+- [Cause](#cause)
+- [Diagnosis](#diagnosis)
+- [Fix](#fix)
+- [Additional Verification](#additional-verification)
+- [When This Problem Commonly Appears](#when-this-problem-commonly-appears)
+- [Best Practice](#best-practice)
+- [Terraform Archive Creation Error](#issue-terraform-archive-creation-error)
+- [AWS Rejects Lambda Deployment Zip](#issue-aws-rejects-lambda-deployment-zip)
+- [.build Directory Issues](#issue-build-directory-behaving-inconsistently)
+- [Validation Workflow Reminder](#validation-workflow-reminder)
+- [Related Documentation](#related-documentation)
+
 This guide documents common issues encountered when deploying or validating the **Bloodhound Lambda infrastructure using Terraform**.
 
 These problems typically occur during packaging, deployment, or validation workflows.

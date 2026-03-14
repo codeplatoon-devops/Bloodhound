@@ -1,5 +1,20 @@
 # Validating Slack Slash Commands and Lambda Execution Logs
 
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Part A — Open CloudWatch Logs](#part-a--open-cloudwatch-logs-set-this-up-first)
+- [Part B — Trigger the Slash Command in Slack](#part-b--trigger-the-slash-command-in-slack)
+- [Part C — Watch Logs Update in CloudWatch](#part-c--watch-logs-update-in-cloudwatch)
+- [What You Should Look For in Logs](#what-you-should-look-for-in-logs)
+- [If You Do Not See Logs](#if-you-do-not-see-logs)
+- [Optional Fast Path](#optional-fast-path-sometimes-easier)
+- [Success Criteria](#success-criteria)
+- [Validating `/v2_seek_destroy` Safety Controls](#validating-v2_seek_destroy-safety-controls)
+- [Verify Lambda Environment Variables](#verify-lambda-environment-variables)
+- [Watching Lambda Logs Live](#watching-lambda-logs-live)
+- [Common Failure Scenarios](#common-failure-scenarios)
+
 This document verifies that Slack slash commands are correctly wired to **BloodhoundLambdaV2** and that the Lambda execution can be observed in **CloudWatch Logs**.
 
 Use this procedure after:

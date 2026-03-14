@@ -1,5 +1,16 @@
 # Bloodhound v2 Configuration Guide
 
+## Table of Contents
+
+- [Configuration Sources](#configuration-sources)
+- [Teardown Mode Configuration](#teardown-mode-configuration)
+- [Deletion Safety Limit](#deletion-safety-limit)
+- [AWS Account Safety Guard](#aws-account-safety-guard)
+- [Terraform Deployment Safety](#terraform-deployment-safety)
+- [Bloodhound Safety Architecture](#bloodhound-safety-architecture)
+- [Teardown Execution Flow](#teardown-execution-flow)
+- [Related Documentation](#related-documentation)
+
 This document describes the configuration system used by **Bloodhound v2**, including environment variables, teardown behavior, and operational safety controls.
 
 Configuration is primarily provided through environment variables.
@@ -37,7 +48,7 @@ Bloodhound loads configuration from the following sources:
 
 Bloodhound supports both **safe planning mode** and **real deletion mode**.
 
-Two environment variables control teardown behavior:
+Two environment variables control how teardown operations behave:
 
 ```
 APPLY_CHANGES
@@ -50,7 +61,7 @@ These variables must follow specific combinations.
 | ------------- | ----------------- | ------------------------------------- |
 | false         | true              | Safe dry-run mode (default operation) |
 | true          | false             | Real deletion mode                    |
-| false         | false             | Allowed but uncommon configuration (plan only, no deletion)    |
+| false         | false             | Allowed but uncommon configuration (builds a plan but performs no deletion) |
 | true          | true              | ❌ Invalid configuration               |
 
 If both values are set to `true`, the configuration becomes contradictory.
@@ -126,7 +137,7 @@ This prevents validation scripts from running against the wrong AWS account.
 
 # Terraform Deployment Safety
 
-Terraform includes an additional safety guard preventing destructive deployment configuration.
+Terraform includes an additional safety guard that prevents deployments when destructive mode is enabled.
 
 Variable:
 
@@ -168,7 +179,7 @@ These controls operate at different layers of the system.
 | validation script account guard  | prevents running validation tests in the wrong AWS account |
 | config consistency guard         | prevents invalid teardown configuration                    |
 
-These protections are intentionally redundant.
+These protections are intentionally redundant to provide multiple layers of safety.
 
 If one safety mechanism fails or is bypassed, others remain in place.
 
@@ -184,7 +195,7 @@ The teardown process follows this sequence of safety checks.
 Engineer / Validation Harness
         │
         ▼
-Execution Path
+Teardown Execution Path
    ├─ Slack Command (/v2_seek_destroy CONFIRM)
    └─ Validation Harness Invocation
         │
@@ -216,7 +227,7 @@ Each stage ensures that destructive operations occur only when explicitly intend
 
 # Related Documentation
 
-Validation procedures are documented separately.
+Detailed validation procedures are documented in the following guides.
 
 Slack command validation:
 

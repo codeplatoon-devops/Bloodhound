@@ -1,5 +1,17 @@
 # Bloodhound v2 (AWS resource scanner + Slack alerts + optional teardown)
 
+## 📌 Quick Overview
+
+New to the project?
+
+Start here:
+
+👉 [FEATURES.md](FEATURES.md) — high-level overview of what Bloodhound does.
+
+For deeper engineering documentation:
+
+📚 [docs/](docs/)
+
 ## Table of Contents
 
 - [Stop — Read This Before Running Bloodhound](#️-stop--read-this-before-running-bloodhound)

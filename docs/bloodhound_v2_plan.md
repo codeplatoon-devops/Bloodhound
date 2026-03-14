@@ -1,7 +1,18 @@
-## Bloodhound v2 Plan (tracked implementation checklist)
+# Bloodhound v2 Plan (tracked implementation checklist)
+
+## Table of Contents
+
+- [Current Reality (What v2 Does Today)](#0-current-reality-what-v2-does-today)
+- [v2 Guiding Principles](#1-v2-guiding-principles-keep-it-minimal)
+- [v2 Configuration](#2-v2-configuration-environment-variables)
+- [Target Architecture](#3-target-architecture-whats-implemented)
+- [Resource Record Schema](#4-resource-record-schema-current)
+- [Resources to Scan](#5-resources-to-scan-status)
+- [Teardown Delete Policy](#6-teardown-delete-policy-status)
+- [Milestones](#7-milestones-tracked-checklist)
+- [Open Questions / Future Improvements](#8-open-questions--next-improvements-optional)
 
 This document is the shared plan for evolving Bloodhound from v1.0 → v2.x while keeping the project simple and readable.
-It’s intentionally pragmatic: what’s **done** is marked with strikethrough, and what’s **next** stays short and actionable.
 
 Repo: `https://github.com/codeplatoon-devops/Bloodhound.git`
 

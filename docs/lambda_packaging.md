@@ -1,5 +1,13 @@
 # Lambda Dependency Management and Packaging Strategy
 
+## Table of Contents
+
+- [Why AWS Includes boto3 in Lambda](#why-aws-includes-boto3-in-lambda)
+- [Why boto3 Should Not Be Bundled](#why-boto3-should-not-be-bundled)
+- [Development Dependencies](#development-dependencies)
+- [Lambda Packaging Flow (Current Implementation)](#lambda-packaging-flow-current-implementation)
+- [Future Packaging Flow (Docker-Based)](#future-packaging-flow-docker-based)
+
 This document explains how Bloodhound packages dependencies for AWS Lambda
 and why certain libraries should not be bundled with the deployment package.
 
