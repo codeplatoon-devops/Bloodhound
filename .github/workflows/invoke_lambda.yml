@@ -16,6 +16,7 @@ name: Invoke Bloodhound Lambda
 #
 # Example payload used here:
 #   { "source": "scheduled" }
+
 # ------------------------------------------------------------
 
 permissions:
