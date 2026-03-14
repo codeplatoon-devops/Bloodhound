@@ -1,5 +1,18 @@
 ## Bloodhound v2 Infrastructure (Terraform)
 
+## Table of Contents
+
+- [First-Time Terraform Setup](#first-time-terraform-setup)
+- [What Terraform Creates](#what-terraform-creates)
+- [Deploy Flow](#deploy-flow)
+- [Python Version Requirement for Lambda Packaging](#python-version-requirement-for-lambda-packaging)
+- [AWS Region Alignment](#aws-region-alignment)
+- [Environment Variables and Secrets](#environment-variables-and-secrets)
+- [Lambda Versioning and Alias](#lambda-versioning-and-alias)
+- [Performing a Rollback](#performing-a-rollback)
+- [Permanent Rollback Using Terraform](#permanent-rollback-using-terraform)
+- [Destructive Mode Deployment Guard](#destructive-mode-deployment-guard)
+
 This directory provisions the AWS infrastructure for running Bloodhound v2 with Slack slash commands.
 
 We use a **Lambda Function URL** (single endpoint) for `/seek` and `/seek_destroy`.
@@ -57,7 +70,11 @@ terraform init
 terraform apply
 ```
 
-Terraform will automatically prepare `../.build/lambda_pkg/` (dependencies + source) and build `../.build/bloodhound_lambda_v2.zip` as part of `terraform apply` (via `terraform_data` + the `archive_file` data source).
+Terraform automatically prepares `../.build/lambda_pkg/` (dependencies + source) and builds `../.build/bloodhound_lambda_v2.zip` during `terraform apply`.
+
+The build process is triggered when Terraform detects changes to the Lambda source code or dependency files.
+
+This ensures the Lambda package is rebuilt only when the application code changes.
 
 2. Configure Slack slash commands
 
@@ -77,7 +94,12 @@ This step is executed by Terraform using:
 
 `python3 -m pip install -r requirements.txt -t .build/lambda_pkg`
 
-Because Python dependency resolution can vary across versions, the local Python version used during packaging should match the Lambda runtime version.
+Because Python dependency resolution can vary between versions,
+the Python version used to build the Lambda package should match
+the Lambda runtime version.
+
+This prevents dependency conflicts and ensures the deployed
+package behaves the same in AWS as it does during packaging.
 
 If your system default python3 is a newer version (for example Python 3.12 or Python 3.13), the packaging step may fail with dependency resolution errors during:
 
@@ -154,7 +176,7 @@ The .env file is only used for local development and should never be committed t
 
 AWS Runtime Configuration
 
-When deployed to AWS Lambda, Bloodhound does not use .env.
+When deployed to AWS Lambda, Bloodhound does not use `.env`.
 
 Instead, configuration is provided through Lambda environment variables.
 
@@ -431,6 +453,9 @@ APPLY_CHANGES=true
 
 Terraform will refuse to deploy unless the engineer explicitly
 acknowledges the action.
+
+This guard prevents accidental deployments where Bloodhound
+would be allowed to delete infrastructure.
 
 Example error:
 

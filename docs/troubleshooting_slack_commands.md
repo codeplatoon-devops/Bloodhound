@@ -1,5 +1,18 @@
 # Slack Slash Command Troubleshooting
 
+## Table of Contents
+
+- [Common Causes](#common-causes)
+- [Step 1 — Verify Lambda Function URL](#step-1--verify-the-lambda-function-url)
+- [Step 2 — Verify Slack Slash Command Configuration](#step-2--verify-the-slack-slash-command-configuration)
+- [Step 3 — Validate Lambda Endpoint Health](#step-3--validate-lambda-endpoint-health)
+- [Step 4 — Reinstall Slack App](#step-4--reinstall-the-slack-app-if-commands-are-missing)
+- [Step 5 — Verify Channel Configuration](#step-5--verify-channel-configuration)
+- [Step 6 — Perform Direct Command Test](#step-6--perform-a-direct-command-test)
+- [Preventing This Issue](#preventing-this-issue)
+- [Force Slack to Refresh Slash Commands](#step-7--force-slack-to-refresh-slash-commands)
+- [Related Documentation](#related-documentation)
+
 This guide explains how to diagnose and fix situations where the **Bloodhound Slack commands (such as `/v2_seek`, `/v2_seek_destroy_plan`, `/v2_seek_destroy`, or `/v2_status`) stop appearing or stop responding**.
 
 These issues typically occur after infrastructure updates or configuration changes.

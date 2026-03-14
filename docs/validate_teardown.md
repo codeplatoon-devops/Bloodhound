@@ -1,5 +1,24 @@
 # Controlled Teardown Validation
 
+## Table of Contents
+
+- [Safety Warning](#safety-warning)
+- [Validation Overview](#validation-overview)
+- [Infrastructure Smoke Test](#infrastructure-smoke-test)
+- [Automation Script](#automation-script)
+- [Step 1 — Create Disposable Test Resource](#step-1--create-disposable-test-resource)
+- [Step 2 — Capture the Instance ID](#step-2--capture-the-instance-id)
+- [Step 3 — Verify Bloodhound Detects the Resource](#step-3--verify-bloodhound-detects-the-resource)
+- [Step 4 — Invoke Validation Mode](#step-4--invoke-validation-mode)
+- [Step 5 — Execute Teardown](#step-5--execute-teardown-automated)
+- [Step 6 — Automatic Deletion Verification](#step-6--automatic-deletion-verification)
+- [Step 7 — Restore Safe Mode](#step-7--restore-safe-mode)
+- [Step 8 — Cleanup Terraform State](#step-8--cleanup-terraform-state)
+- [Expected Lambda Log Flow](#expected-lambda-log-flow)
+- [Success Criteria](#success-criteria)
+- [When to Run This Test](#when-to-run-this-test)
+- [Related Documentation](#related-documentation)
+
 This document describes how to safely validate the **actual resource deletion path**
 in Bloodhound v2.
 
@@ -276,13 +295,27 @@ This enables real teardown execution.
 
 ---
 
-# Step 5 — Execute Teardown
+## Step 5 — Execute Teardown (Automated)
 
-Run the destroy command in Slack:
+The validation workflow invokes the Bloodhound Lambda function
+directly using a validation event.
 
-```
-/v2_seek_destroy CONFIRM
-```
+No Slack commands are required.
+
+The validation harness sends a payload similar to:
+
+{
+"source": "validation",
+"mode": "seek_destroy_validation",
+"target_ids": ["INSTANCE_ID"]
+}
+
+The Lambda validation handler enables controlled destructive mode
+internally and restricts deletion to the specified validation target.
+
+This allows the teardown pipeline to run automatically without
+modifying Lambda environment variables or running Slack commands.
+
 
 Expected Slack output:
 
@@ -294,25 +327,21 @@ The Slack message should include the EC2 instance created in Step 1.
 
 ---
 
-# Step 6 — Verify Deletion Automatically
+# Step 6 — Automatic Deletion Verification
 
-Instead of manually checking AWS Console, verify using the CLI.
+The validation script automatically verifies that the instance
+was successfully deleted.
 
-Run:
+The workflow repeatedly queries the EC2 API until the instance
+reaches the `terminated` state.
 
-```
-INSTANCE_ID=$(terraform output -raw bloodhound_test_instance_id)
+Example output:
 
-aws ec2 describe-instances \
---instance-ids $INSTANCE_ID \
---region us-west-2
-```
+Instance state: shutting-down (waiting...)
+Instance state: shutting-down (waiting...)
 
-Expected result:
-
-```
-InvalidInstanceID.NotFound
-```
+SUCCESS: Instance terminated successfully.
+RESULT: PASS
 
 This confirms that Bloodhound successfully deleted the instance.
 

@@ -1,5 +1,21 @@
 # Bloodhound Validation — User Guide
 
+## Table of Contents
+
+- [When to Run Validation](#when-to-run-validation)
+- [Quick Validation Workflow](#quick-validation-workflow)
+- [Step 1 — Run the Validation Workflow](#step-1--run-the-validation-workflow)
+- [Step 2 — Automatic Validation Invocation](#step-2--automatic-validation-invocation)
+- [Validate Lambda Health Endpoint](#validate-lambda-health-endpoint)
+- [Step 3 — Automatic Deletion Verification](#step-3--automatic-deletion-verification)
+- [Step 4 — Validation Logs](#step-4--validation-logs)
+- [Bloodhound Execution Modes](#bloodhound-execution-modes)
+- [Expected Slack Output](#expected-slack-output)
+- [If Validation Fails](#if-validation-fails)
+- [Safety Reminder](#safety-reminder)
+- [Recommended Validation Order](#recommended-validation-order)
+- [Related Documentation](#related-documentation)
+
 This guide explains **when and how to run the Bloodhound validation workflow**.
 
 The validation workflow confirms that the full system is functioning correctly, including:
@@ -126,7 +142,8 @@ This check verifies the Lambda deployment without triggering a scan.
 
 # Step 3 — Automatic Deletion Verification
 
-After the Slack command runs, the validation script will automatically verify that the resource was deleted.
+After Lambda executes the validation event, the validation script
+automatically verifies that the resource was deleted.
 
 Example output:
 

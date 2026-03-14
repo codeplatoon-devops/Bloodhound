@@ -1,5 +1,17 @@
 # Safe Operations Guide (Bloodhound V2)
 
+## Table of Contents
+
+- [Core Safety Principles](#core-safety-principles)
+- [Default Safety Configuration](#default-safety-configuration)
+- [Safe Validation Procedure](#safe-validation-procedure)
+- [Controlled Deletion Procedure](#controlled-deletion-procedure)
+- [Full Cleanup](#full-cleanup-use-extreme-caution)
+- [Terraform Safety Guard](#terraform-safety-guard)
+- [Lambda Version Rollback](#lambda-version-rollback)
+- [Emergency Stop](#emergency-stop)
+- [Summary](#summary)
+
 This document describes the operational safeguards built into Bloodhound V2 and the procedures engineers must follow before enabling destructive actions.
 
 Bloodhound is capable of identifying and deleting unused cloud infrastructure. Because of this capability, strict safeguards are enforced to prevent accidental resource deletion.
@@ -59,7 +71,7 @@ Before enabling deletion, the following validation process must be completed.
 In Slack:
 
 ```
-/seek
+/v2_seek
 ```
 
 Confirm that the system reports:
@@ -175,7 +187,7 @@ TEARDOWN_ALLOW_ALL=true
 Then run:
 
 ```
-/seek_destroy CONFIRM
+/v2_seek_destroy CONFIRM
 ```
 
 Bloodhound will execute the teardown plan.

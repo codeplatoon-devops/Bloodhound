@@ -1,5 +1,22 @@
 # Slack Setup (Bloodhound-V2)
 
+## Table of Contents
+
+- [Recommended Manifest Setup](#recommended-manifest-based-setup-v2)
+- [Slack Manifest Design](#slack-manifest-design-architecture-notes)
+- [Slack Commands](#slack-commands-bloodhound-v2)
+- [Internal Command Mapping](#internal-command-mapping)
+- [Teardown Safety Workflow](#teardown-safety-workflow)
+- [Create or Update the Slack App](#1-create-or-update-the-slack-app)
+- [Install the App](#2-install-the-app)
+- [Retrieve Required Secrets](#3-retrieve-required-secrets-manual-step)
+- [Invite Bot to Channel](#4-invite-bot-to-channel)
+- [Capture Channel IDs](#5-capture-channel-ids)
+- [Validate](#6-validate)
+- [Legacy Manual Slack Setup](#legacy-manual-slack-setup-deprecated)
+- [/v2_status Command](#v2_status--system-status-command)
+- [Validate Slack Command Endpoint](#validate-slack-command-endpoint)
+
 This project uses a Slack App to post scan summaries, budget alerts, and handle slash commands.
 
 Bloodhound V2 Slack Commands

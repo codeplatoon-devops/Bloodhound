@@ -1,5 +1,34 @@
 # Bloodhound v2 (AWS resource scanner + Slack alerts + optional teardown)
 
+## 📌 Quick Overview
+
+New to the project?
+
+Start here:
+
+👉 [FEATURES.md](FEATURES.md) — high-level overview of what Bloodhound does.
+
+For deeper engineering documentation:
+
+📚 [docs/](docs/)
+
+## Table of Contents
+
+- [Stop — Read This Before Running Bloodhound](#️-stop--read-this-before-running-bloodhound)
+- [Documentation](#documentation)
+- [Requirements](#requirements)
+- [Local Setup and Testing](#local-setup--testing)
+- [Dependency Management](#dependency-management)
+- [Configure .env](#configure-env)
+- [Run Locally](#run-locally)
+- [Whitelisting](#whitelisting)
+- [Teardown Controls](#teardown-controls-important)
+- [Build the Lambda Deployment Zip](#build-the-lambda-deployment-zip-v2)
+- [Deploy to AWS Lambda](#deploy-to-aws-lambda-v2)
+- [Terraform Deployment Workflow](#terraform-deployment-workflow)
+- [Slack Slash Commands](#slack-slash-commands-v2)
+- [Validation Scripts](#validation-scripts)
+
 Bloodhound v2 scans selected AWS regions for common cost-leak resources, posts results to Slack, and can optionally delete resources that are **not** whitelisted.
 
 
@@ -16,7 +45,7 @@ Project docs:
 
 ![AWS Architecture Diagram (v2)](assets/bloodhound_lambda_architecture_v2.svg)
 
-## ⚠️ STOP — Read This Before Running Bloodhound
+## ⚠️ Safety Notice — Read Before Running Bloodhound
 
 Bloodhound can delete AWS infrastructure when `APPLY_CHANGES=true`.
 
@@ -50,9 +79,7 @@ Controlled teardown validation:
 
 System architecture:
 
-📘 [docs/bloodhound_bloodhound_v2_plan.md](docs/bloodhound_bloodhound_v2_plan.md)
-
----
+📘 [docs/bloodhound_v2_plan.md](docs/bloodhound_v2_plan.md)
 
 ---
 
@@ -260,10 +287,10 @@ Result:
 
 Teardown aborted.
 
-This protects against unexpected scanning behavior or configuration
-errors that could otherwise delete large amounts of infrastructure.
+This protection prevents unexpected scanning behavior or configuration
+errors from deleting large amounts of infrastructure in a single run.
 
-### Runtime safety rails
+### Runtime Safety Guards
 
 Bloodhound includes several runtime safeguards:
 
@@ -497,7 +524,10 @@ Typical usage after deploying infrastructure:
 terraform apply
 tools/run_validation_workflow.sh
 
-Smoke Test
+### Smoke Test
+
+Script:
+
 tools/smoke_test_lambda.sh
 
 This script performs a quick health check of the deployed Lambda.
@@ -518,7 +548,10 @@ terraform apply
 
 It detects most deployment problems within seconds.
 
-Controlled Teardown Validation
+### Controlled Teardown Validation
+
+Script:
+
 tools/validate_teardown.sh
 
 This script automates the teardown validation procedure described in:
@@ -620,3 +653,16 @@ Terraform deployment may be out of sync.
 If Slack commands stop responding after deployment, see:
 
 `docs/troubleshooting_slack_commands.md`
+
+## ⚙️ GitHub Automation
+
+Bloodhound includes a GitHub Actions workflow that can:
+
+• run scheduled infrastructure scans  
+• trigger validation workflows  
+• invoke the Bloodhound Lambda scanner  
+• stream Lambda logs directly into CI output  
+
+For full details see:
+
+➡ docs/github_actions.md
