@@ -28,6 +28,12 @@ For deeper engineering documentation:
 - [Terraform Deployment Workflow](#terraform-deployment-workflow)
 - [Slack Slash Commands](#slack-slash-commands-v2)
 - [Validation Scripts](#validation-scripts)
+- [GitHub Automation](#️-github-automation)
+- [GitHub OIDC Authentication Bootstrap](#github-oidc-authentication-bootstrap)
+- [Bootstrap Script](#bootstrap-script)
+- [Run the bootstrap script](#run-the-bootstrap-script)
+- [Trust Policy](#trust-policy)
+- [Security Notes](#security-notes)
 
 Bloodhound v2 scans selected AWS regions for common cost-leak resources, posts results to Slack, and can optionally delete resources that are **not** whitelisted.
 
@@ -470,6 +476,134 @@ It invokes:
 
 ---
 
+## ⚙️ GitHub Automation
+
+Bloodhound includes a GitHub Actions workflow that can:
+
+• run scheduled infrastructure scans  
+• trigger validation workflows  
+• invoke the Bloodhound Lambda scanner  
+• stream Lambda logs directly into CI output  
+
+For full details see:
+
+➡ docs/github_actions.md
+
+---
+
+### GitHub OIDC Authentication Bootstrap
+
+The GitHub workflow authenticates to AWS using **OIDC role assumption**.
+
+This avoids storing long-lived AWS credentials in GitHub secrets.
+
+Instead, GitHub obtains **temporary AWS credentials** during workflow execution.
+
+Authentication flow:
+
+GitHub Actions
+↓
+OIDC identity token
+↓
+AWS STS AssumeRoleWithWebIdentity
+↓
+BloodhoundGitHubInvokeRole
+↓
+Temporary AWS credentials
+↓
+Invoke BloodhoundLambdaV2
+
+### Bootstrap Script
+
+The repository includes a helper script to configure the required IAM resources.
+
+Script:
+
+scripts/bootstrap_github_oidc.sh
+
+
+This script performs the following tasks:
+
+1. Detects the GitHub OIDC identity provider
+2. Creates it if missing
+3. Creates the IAM role `BloodhoundGitHubInvokeRole`
+4. Configures the trust policy for the repository
+5. Attaches Lambda invocation permissions
+6. Tags IAM resources for governance and auditing
+
+Temporary Policy Artifacts
+
+The bootstrap script generates temporary JSON files during execution:
+
+trust-policy.json
+lambda-policy.json
+
+These files are required by the AWS CLI when creating IAM roles and attaching policies.
+
+They are temporary artifacts only and are automatically removed when the script exits.
+
+This cleanup behavior is implemented using a Bash trap:
+
+trap "rm -f trust-policy.json lambda-policy.json" EXIT
+
+This ensures that:
+
+temporary policy files are never accidentally committed to the repository
+
+local workspaces remain clean after script execution
+
+CI environments do not accumulate artifacts
+
+These files should not be added to Git.
+
+If they appear locally (for example if the script is interrupted), they can safely be deleted.
+
+---
+
+### Run the bootstrap script
+
+Run once when setting up CI access for a new AWS account.
+
+chmod +x scripts/bootstrap_github_oidc.sh
+./scripts/bootstrap_github_oidc.sh
+
+
+The script will output the IAM role ARN used by the GitHub workflow.
+
+Example:
+
+
+arn:aws:iam::<ACCOUNT_ID>:role/BloodhoundGitHubInvokeRole
+
+
+---
+
+### Trust Policy
+
+The IAM role restricts access to workflows originating from the
+official repository:
+
+
+repo:codeplatoon-devops/Bloodhound:*
+
+
+This allows engineers to run workflows from **any branch** within the
+repository, enabling CI testing for feature branches while still
+preventing external repositories from assuming the role.
+
+---
+
+### Security Notes
+
+This architecture provides several advantages:
+
+• no AWS access keys stored in GitHub  
+• temporary credentials issued per workflow run  
+• access restricted to a specific repository  
+• IAM role tagged for governance and auditing
+
+---
+
 ## Slack slash commands (v2)
 
 Slash commands require a publicly reachable HTTPS endpoint. For v2 we recommend a **Lambda Function URL** (one endpoint) and route based on the Slack `command` field.
@@ -653,16 +787,3 @@ Terraform deployment may be out of sync.
 If Slack commands stop responding after deployment, see:
 
 `docs/troubleshooting_slack_commands.md`
-
-## ⚙️ GitHub Automation
-
-Bloodhound includes a GitHub Actions workflow that can:
-
-• run scheduled infrastructure scans  
-• trigger validation workflows  
-• invoke the Bloodhound Lambda scanner  
-• stream Lambda logs directly into CI output  
-
-For full details see:
-
-➡ docs/github_actions.md
