@@ -457,3 +457,19 @@ This protects CI systems from stuck jobs and ensures validation runs
 fail fast when infrastructure operations do not complete in time.
 
 
+## Observability Improvements (Future)
+
+Enhance Bloodhound runtime visibility and debugging support.
+
+Planned upgrades:
+
+- Replace stdout prints with structured logging
+- Add log levels (INFO, WARNING, ERROR)
+- Include request_id and execution context
+- Emit scan/budget/teardown metrics as structured JSON
+- Enable optional CloudWatch Insights queries
+- Add CI pipeline visibility for scan summaries
+
+These improvements will make it easier to troubleshoot production
+runs and analyze historical scans.
+
