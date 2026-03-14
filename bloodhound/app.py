@@ -117,6 +117,9 @@ def execute_pipeline(event):
     application architecture maintainable as the system grows.
     """
 
+    print("Bloodhound pipeline started")
+    print("Event:", json.dumps(event))
+
     # Load configuration from env/.env and validate required fields.
     cfg = load_config()
     errors = validate_config(cfg)

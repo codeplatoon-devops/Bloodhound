@@ -135,6 +135,39 @@ jobs:
 
 
         # -------------------------------------------------------
+        # Group: Bloodhound Summary
+        #
+        # This prints a concise operational summary extracted
+        # from the Lambda response so CI logs clearly show what
+        # Bloodhound discovered during the scan.
+        #
+        # These values come directly from the structured response
+        # returned by the Bloodhound pipeline.
+        #
+        # Sections displayed:
+        #   • scan      → resource discovery summary
+        #   • budget    → cost projection snapshot
+        #   • teardown  → planned/allowed cleanup actions
+        #
+        # This improves observability without failing the CI job.
+        # -------------------------------------------------------
+        echo "::group::Bloodhound Summary"
+
+        echo "Scan Summary:"
+        jq '.scan' output.json
+
+        echo ""
+        echo "Budget Snapshot:"
+        jq '.budget' output.json
+
+        echo ""
+        echo "Teardown Plan:"
+        jq '.teardown' output.json
+
+        echo "::endgroup::"
+
+
+        # -------------------------------------------------------
         # Group: Invocation Metadata
         # -------------------------------------------------------
         echo "::group::Lambda Invocation Metadata"
