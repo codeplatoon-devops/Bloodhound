@@ -18,7 +18,7 @@
 #
 # ------------------------------------------------------------
 
-set -e  # exit immediately if any command fails
+set -euo pipefail  # exit immediately if any command fails
 
 # ------------------------------------------------------------
 # Disable AWS CLI pager
@@ -31,6 +31,25 @@ set -e  # exit immediately if any command fails
 # prints directly to the terminal.
 # ------------------------------------------------------------
 export AWS_PAGER=""
+
+# ------------------------------------------------------------
+# Validation Run Identifier
+# ------------------------------------------------------------
+
+RUN_ID=$(date +"%Y%m%d_%H%M%S")
+
+# ------------------------------------------------------------
+# Workflow Logging
+# ------------------------------------------------------------
+
+LOG_DIR="logs/validation"
+mkdir -p "$LOG_DIR"
+
+LOG_FILE="$LOG_DIR/workflow_validation_${RUN_ID}.log"
+
+# send all output to terminal AND log
+exec > >(tee -a "$LOG_FILE") 2>&1
+
 
 echo ""
 echo "================================================"
@@ -58,8 +77,6 @@ echo ""
 echo "Step 2: Starting controlled teardown validation..."
 echo ""
 
-RUN_ID=$(date +"%Y%m%d_%H%M%S")
-
 echo "Validation Run ID: $RUN_ID"
 
 ./tools/validate_teardown.sh "$RUN_ID"
@@ -69,3 +86,18 @@ echo "================================================"
 echo "Validation workflow completed successfully."
 echo "================================================"
 echo ""
+
+# ------------------------------------------------------------------
+# Workflow Log Retention
+#
+# Keep only the 3 most recent workflow validation logs.
+# Older logs are removed automatically to prevent the
+# validation directory from growing indefinitely.
+#
+# Detailed teardown logs have their own retention policy
+# inside validate_teardown.sh.
+# ------------------------------------------------------------------
+
+echo "Keeping only the 3 most recent workflow logs."
+
+ls -1t "$LOG_DIR"/workflow_validation_* 2>/dev/null | tail -n +4 | xargs -r rm

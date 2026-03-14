@@ -17,7 +17,9 @@ Planning
    ↓
 Dry-run validation
    ↓
-Explicit operator confirmation
+Execution Path
+   ├─ Operator confirmation (Slack)
+   └─ Validation harness (automated testing)
    ↓
 Deletion
 ```
@@ -146,11 +148,15 @@ Example:
 TEARDOWN_TARGET_IDS=i-0123456789abcdef
 ```
 
-Then execute:
+Then execute one of the following:
 
-```
-/seek_destroy CONFIRM
-```
+Operator-triggered deletion (Slack):
+
+/v2_seek_destroy CONFIRM
+
+or automated validation execution:
+
+validation harness → Lambda validation event
 
 ---
 

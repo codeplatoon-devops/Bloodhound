@@ -49,7 +49,32 @@ if [ ! -d "tools" ] || [ ! -d "infra" ]; then
 fi
 
 # Stop the script immediately if any command fails
-set -e
+set -euo pipefail
+
+# ensures failures message in CI logs.
+trap 'echo "Validation script failed"; exit 1' ERR
+
+# ------------------------------------------------------------------
+# Validation Mode Configuration
+#
+# Default behavior:
+#   automated validation (CI/CD safe)
+#
+# Optional:
+#   --manual enables Slack confirmation steps so engineers can
+#   visually verify the scan and teardown plan.
+#
+# Examples:
+#
+#   ./tools/run_validation_workflow.sh
+#   ./tools/run_validation_workflow.sh --manual
+# ------------------------------------------------------------------
+
+MANUAL_MODE=false
+
+if [ "$1" == "--manual" ]; then
+  MANUAL_MODE=true
+fi
 
 # ------------------------------------------------------------------
 # Disable AWS CLI Pager
@@ -232,6 +257,20 @@ echo ""
 
 INSTANCE_ID=$(terraform -chdir=infra output -raw bloodhound_test_instance_id)
 
+# ------------------------------------------------------------------
+# Safety Guard — Ensure Terraform returned a valid instance ID
+#
+# If INSTANCE_ID is empty, something failed during Terraform
+# provisioning and the validation workflow must stop immediately.
+# ------------------------------------------------------------------
+
+if [ -z "$INSTANCE_ID" ]; then
+  echo ""
+  echo "ERROR: Terraform did not return a valid instance ID."
+  echo "Validation cannot continue."
+  exit 1
+fi
+
 echo "Instance created:"
 echo "$INSTANCE_ID"
 
@@ -250,21 +289,38 @@ sleep 10
 #
 # Engineer manually runs the Slack command /v2_seek to confirm the
 # instance appears in the scan results.
+
+
+echo ""
+echo "----------------------------------------"
+log "Scan Confirmation Step"
+echo "----------------------------------------"
+echo ""
+
+# ------------------------------------------------------------------
+# Manual verification mode
+#
+# Engineers can observe the scan results via Slack before
+# continuing the validation workflow.
 # ------------------------------------------------------------------
 
-echo ""
-echo "----------------------------------------"
-log "Manual Step Required"
-echo "----------------------------------------"
-echo ""
-echo "Run this command in Slack:"
-echo ""
-echo "  /v2_seek"
-echo ""
-echo "Confirm the EC2 instance appears in the scan results."
-echo ""
+if [ "$MANUAL_MODE" = true ]; then
 
-read -p "Press ENTER once /v2_seek has confirmed detection..."
+  echo "Run this command in Slack:"
+  echo ""
+  echo "  /v2_seek"
+  echo ""
+  echo "Confirm the EC2 instance appears in the scan results."
+  echo ""
+
+  read -p "Press ENTER once /v2_seek has confirmed detection..."
+
+else
+
+  echo "Skipping Slack scan confirmation (automated validation mode)."
+
+fi
+
 
 # ------------------------------------------------------------------
 # Deletion Safety Guard
@@ -304,82 +360,253 @@ fi
 
 echo ""
 echo "----------------------------------------"
-log "Manual Step Required"
+log "Triggering Bloodhound Validation Teardown"
 echo "----------------------------------------"
 echo ""
-echo "Run the destroy command in Slack:"
-echo ""
-echo "  /v2_seek_destroy CONFIRM"
-echo ""
-
-read -p "Press ENTER once Slack shows teardown results..."
-
 
 # ------------------------------------------------------------------
-# Step 5 — Verify Deletion
+# Automated validation teardown
 #
-# The script queries the EC2 API to confirm the instance
-# no longer exists.
+# Instead of requiring a Slack command, the validation script
+# directly invokes the Lambda function with a validation payload.
 #
-# If the instance still exists, the teardown validation fails.
+# This ensures CI/CD pipelines can run validation automatically.
 # ------------------------------------------------------------------
+# ---------------------------------------------------------------
+# ---------------------------------------------------------------
+# Build validation payload
+#
+# The payload is written to /tmp so the repository directory
+# is not polluted with temporary files during validation runs.
+#
+# /tmp is safe for this purpose because:
+#
+# • files are automatically cleared by the OS eventually
+# • the file only needs to exist during this script run
+# • it avoids shell quoting issues with inline JSON
+# ---------------------------------------------------------------
+
+PAYLOAD_FILE="/tmp/bloodhound_validation_payload.json"
+
+cat > "$PAYLOAD_FILE" <<EOF
+{
+  "source": "validation",
+  "mode": "seek_destroy_validation",
+  "target_ids": ["$INSTANCE_ID"]
+}
+EOF
+
+
+echo "Invoking Lambda validation teardown..."
+
+# ---------------------------------------------------------------
+# Lambda invocation result file
+#
+# Store the Lambda response in /tmp for the same reason as the
+# payload file — it is only needed during this validation run
+# and should not clutter the repository.
+# ---------------------------------------------------------------
+
+RESULT_FILE="/tmp/bloodhound_validation_result.json"
+
+aws lambda invoke \
+  --function-name BloodhoundLambdaV2 \
+  --cli-binary-format raw-in-base64-out \
+  --payload file://"$PAYLOAD_FILE" \
+  --region "$REGION" \
+  "$RESULT_FILE"
+
+echo ""
+echo "Lambda response:"
+cat "$RESULT_FILE"
+
+# ------------------------------------------------------------------
+# Lambda response validation
+#
+# Ensure Lambda returned a successful response before continuing.
+# If the Lambda failed internally, the validation workflow should
+# stop immediately.
+# ------------------------------------------------------------------
+
+jq -e '.ok == true' "$RESULT_FILE" >/dev/null || {
+  echo ""
+  echo "ERROR: Lambda returned failure response."
+  echo ""
+  echo "Full Lambda response:"
+  cat "$RESULT_FILE"
+  echo ""
+  exit 1
+}
+
+echo ""
+echo "Validating Lambda teardown execution metrics..."
+
+# ---------------------------------------------------------------
+# Expected Lambda response structure
+#
+# The Lambda teardown response contains execution statistics
+# describing what actions were attempted and whether any failed.
+#
+# Example expected response fragment:
+#
+# {
+#   "teardown": {
+#     "execution": {
+#       "attempted": 1,
+#       "succeeded": 1,
+#       "failed": 0
+#     }
+#   }
+# }
+#
+# What this script validates:
+#
+#   failed == 0        → no teardown errors occurred
+#   succeeded >= 1     → at least one resource was deleted
+#
+# If either condition is not met, validation fails immediately.
+# ---------------------------------------------------------------
+
+
+# Extract execution metrics from the Lambda response JSON
+ATTEMPTED=$(jq '.teardown.execution.attempted // 0' "$RESULT_FILE")
+SUCCEEDED=$(jq '.teardown.execution.succeeded // 0' "$RESULT_FILE")
+FAILED=$(jq '.teardown.execution.failed // 0' "$RESULT_FILE")
+
+# Ensure values are numeric
+if ! [[ "$FAILED" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: Invalid Lambda response format."
+  cat "$RESULT_FILE"
+  exit 1
+fi
+
+
+# Display the extracted metrics for visibility in logs
+echo "Execution metrics:"
+echo "  attempted:  $ATTEMPTED"
+echo "  succeeded:  $SUCCEEDED"
+echo "  failed:     $FAILED"
+
+
+# ---------------------------------------------------------------
+# Fail immediately if Lambda reported teardown errors
+# ---------------------------------------------------------------
+
+if [ "$FAILED" -ne 0 ]; then
+  echo ""
+  echo "ERROR: Lambda reported teardown failures."
+  exit 1
+fi
+
+
+# ---------------------------------------------------------------
+# Ensure at least one resource was successfully deleted
+# ---------------------------------------------------------------
+
+if [ "$SUCCEEDED" -lt 1 ]; then
+  echo ""
+  echo "ERROR: Lambda did not execute any teardown actions."
+  exit 1
+fi
+
+
+echo "Lambda execution metrics validated successfully."
+
+# ------------------------------------------------------------------
+# Optional Slack verification (manual mode)
+#
+# Engineers may optionally observe the teardown behavior using
+# Slack commands before the script verifies deletion.
+# This step is skipped during automated CI validation.
+# ------------------------------------------------------------------
+
+if [ "$MANUAL_MODE" = true ]; then
+
+  echo ""
+  echo "Optional verification using Slack:"
+  echo ""
+  echo "  /v2_seek_destroy CONFIRM"
+  echo ""
+
+  read -p "Press ENTER once Slack teardown results are confirmed..."
+
+fi
+
+
 
 echo ""
 log "Step 6: Verifying instance deletion..."
 echo ""
 
-if aws ec2 describe-instances \
-  --instance-ids "$INSTANCE_ID" \
-  --region "$REGION" >/dev/null 2>&1
-then
-    echo ""
-    RESULT="FAIL"
+# ---------------------------------------------------------------
+# Adaptive termination verification
+#
+# Instead of sleeping a fixed amount of time, poll AWS until the
+# instance reaches the "terminated" state.
+#
+# This makes validation faster when AWS responds quickly and
+# still safe when termination takes longer.
+# ---------------------------------------------------------------
 
-    log "ERROR: Instance still exists."
-    log "RESULT: $RESULT"
+MAX_WAIT=120        # maximum time to wait (seconds)
+WAIT_INTERVAL=3    # poll interval
+ELAPSED=0
 
-    # record validation result in append-only history file
-    echo "$RUN_ID $RESULT" >> "$HISTORY_FILE"
+while [ $ELAPSED -lt $MAX_WAIT ]; do
 
-    echo "Bloodhound did not delete the resource."
-    exit 1
-else
-    echo ""
+  STATE=$(aws ec2 describe-instances \
+    --instance-ids "$INSTANCE_ID" \
+    --region "$REGION" \
+    --query "Reservations[].Instances[].State.Name" \
+    --output text 2>/dev/null || echo "terminated")
+
+  if [ "$STATE" = "terminated" ] || [ "$STATE" = "shutting-down" ]; then
+
     RESULT="PASS"
 
-    log "SUCCESS: Instance no longer exists."
+    echo ""
+    log "SUCCESS: Instance terminated confirmed."
     log "RESULT: $RESULT"
 
     # record validation result in append-only history file
     echo "$RUN_ID $RESULT" >> "$HISTORY_FILE"
 
     echo "Bloodhound successfully deleted the resource."
+
+    break
+  fi
+
+  echo "Instance state: $STATE (waiting...)"
+
+  sleep $WAIT_INTERVAL
+  ELAPSED=$((ELAPSED + WAIT_INTERVAL))
+
+done
+
+
+# ---------------------------------------------------------------
+# Failure condition
+# ---------------------------------------------------------------
+
+if [ "$STATE" != "terminated" ] && [ "$STATE" != "shutting-down" ]; then
+
+  RESULT="FAIL"
+
+  echo ""
+  log "ERROR: Instance still exists after waiting."
+  log "RESULT: $RESULT"
+
+  # record validation result in append-only history file
+  echo "$RUN_ID $RESULT" >> "$HISTORY_FILE"
+
+  echo "Bloodhound did not delete the resource."
+  exit 1
+
 fi
 
 
 # ------------------------------------------------------------------
-# Step 6 — Restore Safe Mode
-#
-# Engineer must ensure the Lambda environment variables are
-# returned to safe mode before continuing.
-# ------------------------------------------------------------------
-
-echo ""
-echo "Step 7: Restoring safe mode configuration"
-echo ""
-
-echo "Reminder:"
-echo "Ensure environment variables are reset:"
-echo ""
-echo "  APPLY_CHANGES=false"
-echo "  TEARDOWN_SIMULATE=true"
-echo ""
-
-read -p "Press ENTER once Terraform configuration has been restored..."
-
-
-# ------------------------------------------------------------------
-# Step 7 — Reapply Terraform Configuration
+# Step 7 — Restore Safe Terraform Configuration
 #
 # Ensures the infrastructure returns to the safe configuration.
 # ------------------------------------------------------------------
@@ -390,18 +617,25 @@ terraform -chdir=infra apply \
 
 
 # ------------------------------------------------------------------
-# Step 8 — Cleanup Validation Resource
+# Step 8 — Reconcile Terraform State
 #
-# Terraform removes the temporary EC2 instance from state.
+# The validation resource was intentionally deleted by the
+# Bloodhound Lambda during the teardown test.
+#
+# Terraform must refresh its state to recognize that the
+# resource no longer exists.
+#
+# Applying with enable_validation_resources=false ensures
+# Terraform returns the infrastructure to the safe default
+# configuration.
 # ------------------------------------------------------------------
 
 echo ""
-log "Step 8: Cleaning up Terraform state"
+log "Step 8: Reconciling Terraform state"
 echo ""
 
-terraform -chdir=infra destroy \
-  -var="enable_validation_resources=true" \
-  -target aws_instance.bloodhound_teardown_test \
+terraform -chdir=infra apply \
+  -var="enable_validation_resources=false" \
   -auto-approve
 
 

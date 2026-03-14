@@ -37,23 +37,37 @@ Bloodhound v2 is already deployed as a **new** Lambda (`BloodhoundLambdaV2`) so 
 
 - Default is **dry-run** (`APPLY_CHANGES=false`)
 - Safe testing of apply-mode: **simulate** (`TEARDOWN_SIMULATE=true`)
-Strong safety rails:
+
+Strong safety rails:Strong safety rails:
 
 - Explicit allowlist: TEARDOWN_TARGET_IDS=...
 - Allow-all mode: TEARDOWN_ALLOW_ALL=true (dangerous; relies on whitelisting)
 
-Infrastructure safety guard:
+Validation safety model:
 
-Terraform prevents deployment when destructive mode is enabled
-unless the engineer explicitly acknowledges it.
+Validation runs are executed through a dedicated validation harness
+rather than Slack commands.
 
-If:
+The validation workflow is:
 
-APPLY_CHANGES=true
+Terraform creates validation resource
+        ↓
+Validation script captures resource ID
+        ↓
+Validation script invokes Lambda with validation payload
+        ↓
+Lambda validation handler enables controlled destructive mode
+        ↓
+Teardown restricted to explicit validation targets
 
-Terraform will refuse to deploy unless the command includes:
+Validation runs enforce three safety checks:
 
-terraform apply -var allow_apply_mode=true
+1. Invocation source must be `validation`
+2. Explicit `target_ids` must be provided
+3. Targets must exist in scan results AND contain the tag `bloodhound:test=true`
+
+This ensures destructive validation testing cannot affect production resources.
+
 
 This prevents accidental deployments that would enable automated deletion.
 - Slash destroy requires:
@@ -64,6 +78,37 @@ Bloodhound always generates a teardown plan (a list of resources it would delete
 If deletion is disabled, the plan is shown in Slack but no resources are removed.
 
 ---
+
+### Validation architecture (v2)
+
+Validation testing for teardown operations is automated and does not
+use Slack commands.
+
+Validation events are invoked directly by the validation harness.
+
+Example validation payload:
+
+{
+  "source": "validation",
+  "mode": "seek_destroy_validation",
+  "target_ids": ["i-1234567890"]
+}
+
+The Lambda validation handler performs the following:
+
+- verifies the event originates from the validation harness
+- verifies the correct validation mode
+- requires explicit target_ids
+- enables destructive execution internally
+- restricts deletion scope to validation targets
+
+Additional safety checks occur during teardown planning:
+
+- target IDs must exist in scan results
+- resources must contain tag `bloodhound:test=true`
+
+These safeguards ensure validation cannot accidentally delete
+non-validation infrastructure.
 
 ## 1) v2 guiding principles (keep it minimal)
 

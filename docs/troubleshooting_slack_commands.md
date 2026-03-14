@@ -1,18 +1,14 @@
-Below is a **clean repository-ready troubleshooting document** you can place in:
-
-```
-docs/troubleshooting_slack_commands.md
-```
-
-It is written in the same **clear operational style** as your other docs.
-
----
-
 # Slack Slash Command Troubleshooting
 
 This guide explains how to diagnose and fix situations where the **Bloodhound Slack commands (such as `/v2_seek`, `/v2_seek_destroy_plan`, `/v2_seek_destroy`, or `/v2_status`) stop appearing or stop responding**.
 
 These issues typically occur after infrastructure updates or configuration changes.
+
+Note
+
+Bloodhound v2 introduced new slash commands prefixed with `/v2_`.
+Older documentation and logs may reference legacy commands such as
+`/seek` or `/seek_destroy`.
 
 ---
 
@@ -84,7 +80,15 @@ Your App
 → Slash Commands
 ```
 
-Select the command (for example `/seek`).
+Select the command.
+
+Legacy systems used:
+
+/seek
+
+Current Bloodhound v2 systems use:
+
+/v2_seek
 
 Verify the **Request URL** is set to:
 
@@ -321,8 +325,15 @@ You can simulate a Slack command by sending a request to Lambda.
 Example:
 
 ```
+Legacy command test:
+
 curl -X POST https://YOUR_LAMBDA_URL \
   -d "command=/seek"
+
+Current Bloodhound v2 test:
+
+curl -X POST https://YOUR_LAMBDA_URL \
+  -d "command=/v2_seek"
 ```
 
 If the Lambda returns JSON output, the endpoint is functioning correctly.
@@ -374,9 +385,15 @@ Navigate to:
 
 Slash Commands
 
-Select the command:
+Select the command.
+
+Legacy command:
 
 /seek
+
+Current command:
+
+/v2_seek
 
 In the command configuration page:
 
@@ -426,7 +443,10 @@ Inside Slack, type:
 
 Slack will reload the slash command list.
 
-If /seek appears again in the suggestion list, the refresh worked.
+If either command appears in the suggestion list, the refresh worked:
+
+/seek  (legacy)
+/v2_seek  (current)
 
 # Related Documentation
 
