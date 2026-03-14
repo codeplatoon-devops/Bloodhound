@@ -7,6 +7,12 @@ Use this procedure after:
 - Slack slash command Request URLs are set to the Lambda Function URL
 - `/v2_seek` is expected to produce Slack output
 
+Note:
+This document validates Slack command routing only.
+The automated teardown validation workflow is documented in:
+
+docs/validate_teardown.md
+
 ---
 
 ## Prerequisites

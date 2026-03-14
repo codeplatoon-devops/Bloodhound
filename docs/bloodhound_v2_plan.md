@@ -38,7 +38,7 @@ Bloodhound v2 is already deployed as a **new** Lambda (`BloodhoundLambdaV2`) so 
 - Default is **dry-run** (`APPLY_CHANGES=false`)
 - Safe testing of apply-mode: **simulate** (`TEARDOWN_SIMULATE=true`)
 
-Strong safety rails:Strong safety rails:
+Strong safety rails:
 
 - Explicit allowlist: TEARDOWN_TARGET_IDS=...
 - Allow-all mode: TEARDOWN_ALLOW_ALL=true (dangerous; relies on whitelisting)

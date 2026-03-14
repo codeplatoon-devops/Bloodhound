@@ -126,7 +126,8 @@ This check verifies the Lambda deployment without triggering a scan.
 
 # Step 3 — Automatic Deletion Verification
 
-After the Slack command runs, the validation script will automatically verify that the resource was deleted.
+After Lambda executes the validation event, the validation script
+automatically verifies that the resource was deleted.
 
 Example output:
 

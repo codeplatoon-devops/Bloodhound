@@ -50,7 +50,7 @@ These variables must follow specific combinations.
 | ------------- | ----------------- | ------------------------------------- |
 | false         | true              | Safe dry-run mode (default operation) |
 | true          | false             | Real deletion mode                    |
-| false         | false             | Allowed but uncommon configuration    |
+| false         | false             | Allowed but uncommon configuration (plan only, no deletion)    |
 | true          | true              | ❌ Invalid configuration               |
 
 If both values are set to `true`, the configuration becomes contradictory.

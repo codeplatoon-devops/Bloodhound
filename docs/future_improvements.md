@@ -441,4 +441,19 @@ Runtime AWS account verification
 
 This creates a **defense-in-depth safety model** for automated infrastructure cleanup.
 
+## 9. Terraform Execution Timeout Guard
+
+The validation harness now runs Terraform through a timeout wrapper
+to prevent CI/CD pipelines from hanging indefinitely.
+
+Example:
+
+timeout 600 terraform apply
+
+If Terraform becomes stuck due to provider issues, network stalls,
+or AWS API delays, the validation workflow will automatically abort.
+
+This protects CI systems from stuck jobs and ensures validation runs
+fail fast when infrastructure operations do not complete in time.
+
 

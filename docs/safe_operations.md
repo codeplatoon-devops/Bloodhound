@@ -59,7 +59,7 @@ Before enabling deletion, the following validation process must be completed.
 In Slack:
 
 ```
-/seek
+/v2_seek
 ```
 
 Confirm that the system reports:
@@ -175,7 +175,7 @@ TEARDOWN_ALLOW_ALL=true
 Then run:
 
 ```
-/seek_destroy CONFIRM
+/v2_seek_destroy CONFIRM
 ```
 
 Bloodhound will execute the teardown plan.

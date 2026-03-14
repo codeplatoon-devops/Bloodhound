@@ -109,6 +109,19 @@ Lambda deployment package contains only the dependencies required
 for runtime execution.
 
 ## Lambda Packaging Flow (Current Implementation)
+
+Terraform only rebuilds the Lambda package when runtime code changes.
+
+Source hashing is limited to:
+
+bloodhound/
+handlers/
+
+Changes in other directories (docs, scripts, tests) will not trigger a
+Lambda rebuild. This keeps Terraform deployments fast and avoids
+unnecessary Lambda updates.
+
+```text
 terraform apply
         │
         ▼
@@ -155,3 +168,4 @@ bloodhound_lambda_v2.zip
         │
         ▼
 Lambda deployment
+```
