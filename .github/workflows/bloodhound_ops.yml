@@ -1,25 +1,44 @@
 name: Bloodhound Operations
 
 # ------------------------------------------------------------
-# GitHub Actions workflow for manual Bloodhound operations.
+# Manual Bloodhound operations workflow
 #
-# This workflow allows operators to manually trigger Lambda
-# operations such as:
+# This workflow lets an operator manually run Bloodhound
+# tasks from the GitHub Actions UI.
 #
-#   scan        → immediate infrastructure scan
-#   validation  → configuration validation
-#   status      → system health check
+# Available operations:
+#   scan        → run infrastructure scan immediately
+#   validation  → check configuration
+#   status      → quick system health check
 #
-# Unlike invoke_lambda.yml, this workflow is NOT scheduled.
-# It is executed manually via the GitHub Actions UI.
 # ------------------------------------------------------------
 
 permissions:
   id-token: write
   contents: read
 
+
+# ------------------------------------------------------------
+# Concurrency Guard
+#
+# Prevents multiple Bloodhound scans running at the same time.
+#
+# Example:
+# scheduled scan running
+# operator triggers manual scan
+#
+# → GitHub will queue the second run instead of running both.
+# ------------------------------------------------------------
+concurrency:
+  group: bloodhound-scan
+  cancel-in-progress: false
+
+
 on:
 
+  # -------------------------------------------------------
+  # Manual trigger from GitHub Actions UI
+  # -------------------------------------------------------
   workflow_dispatch:
     inputs:
       mode:
@@ -41,14 +60,17 @@ jobs:
     steps:
 
     # -------------------------------------------------------
-    # Checkout repository
+    # Pull repository contents
     # -------------------------------------------------------
     - name: Checkout repository
       uses: actions/checkout@v4
 
 
     # -------------------------------------------------------
-    # Configure AWS credentials via GitHub OIDC
+    # Authenticate to AWS using GitHub OIDC
+    #
+    # This assumes the IAM role configured for GitHub
+    # so the workflow can invoke the Lambda securely.
     # -------------------------------------------------------
     - name: Configure AWS credentials via OIDC
       uses: aws-actions/configure-aws-credentials@v5
@@ -59,25 +81,39 @@ jobs:
 
     # -------------------------------------------------------
     # Invoke Bloodhound Lambda
+    #
+    # The selected operation from the UI is passed into
+    # the Lambda payload as:
+    #
+    #   { "source": "scan" }
+    #   { "source": "validation" }
+    #   { "source": "status" }
+    #
+    # Lambda uses this value to decide which pipeline
+    # path to execute.
     # -------------------------------------------------------
     - name: Invoke Bloodhound Lambda operation
       run: |
 
+        # fail fast on script errors
         set -euo pipefail
 
         echo "::group::Bloodhound Lambda Invocation"
 
+        # operation selected in UI
         MODE="${{ github.event.inputs.mode }}"
 
         echo "Selected operation:"
         echo "$MODE"
 
+        # build Lambda event payload
         echo "{\"source\":\"$MODE\"}" > event.json
         cat event.json
 
         echo ""
         echo "Invoking Bloodhound Lambda"
 
+        # invoke Lambda
         aws lambda invoke \
           --function-name BloodhoundLambdaV2 \
           --cli-binary-format raw-in-base64-out \
@@ -91,7 +127,7 @@ jobs:
 
 
         # -------------------------------------------------------
-        # Lambda Response
+        # Print Lambda response payload
         # -------------------------------------------------------
         echo "::group::Lambda Response Payload"
         cat output.json
@@ -99,7 +135,7 @@ jobs:
 
 
         # -------------------------------------------------------
-        # Bloodhound Summary
+        # Print Bloodhound operational summary results retunred from Lambda
         # -------------------------------------------------------
         echo "::group::Bloodhound Summary"
 
@@ -118,7 +154,10 @@ jobs:
 
 
         # -------------------------------------------------------
-        # Invocation Metadata
+        # AWS invocation metadata
+        #
+        # Shows request ID, status code, and other
+        # Lambda invocation information.
         # -------------------------------------------------------
         echo "::group::Lambda Invocation Metadata"
         cat lambda_meta.json
@@ -126,7 +165,9 @@ jobs:
 
 
         # -------------------------------------------------------
-        # Decoded Lambda Logs
+        # Decode Lambda logs returned in the invocation
+        #
+        # AWS embeds the last ~4KB of logs in base64.
         # -------------------------------------------------------
         echo "::group::Decoded Lambda Logs"
 
@@ -140,7 +181,9 @@ jobs:
 
 
         # -------------------------------------------------------
-        # Lambda Failure Detection
+        # Detect Lambda failures
+        #
+        # Ensures CI fails if Lambda execution fails.
         # -------------------------------------------------------
         echo "::group::Lambda Error Check"
 
@@ -160,7 +203,7 @@ jobs:
 
 
     # -------------------------------------------------------
-    # Fetch latest CloudWatch logs
+    # Pull recent logs from CloudWatch
     # -------------------------------------------------------
     - name: Fetch Lambda Logs
       run: |
@@ -169,6 +212,7 @@ jobs:
 
         LOG_GROUP="/aws/lambda/BloodhoundLambdaV2"
 
+        # find most recent log stream
         LOG_STREAM=$(aws logs describe-log-streams \
           --log-group-name $LOG_GROUP \
           --order-by LastEventTime \

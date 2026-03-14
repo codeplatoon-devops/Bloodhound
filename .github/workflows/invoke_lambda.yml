@@ -23,10 +23,20 @@ permissions:
   id-token: write
   contents: read
 
+# Prevent multiple scans running at the same time
+concurrency:
+  group: bloodhound-scan
+  cancel-in-progress: false
+
 on:
 
   # ----------------------------------------------------------
   # Scheduled runs (UTC)
+  #
+  # NOTE:
+  # GitHub cron jobs only run from the repository DEFAULT
+  # branch (usually "main"). If this workflow exists only
+  # in another branch, the schedule will NOT trigger.
   #
   # Bloodhound executes twice per day:
   #
