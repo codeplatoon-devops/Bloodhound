@@ -86,3 +86,7 @@ logs/validation/*.log
 
 # However, we want to keep the validation history log, which tracks past validation runs and their results.
 !logs/validation_history.log
+
+# Bootstrap script artifacts
+trust-policy.json
+lambda-policy.json
