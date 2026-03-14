@@ -192,6 +192,203 @@ This ensures the Lambda package is rebuilt with the latest source.
 
 ---
 
+## Issue: Terraform Archive Creation Error
+
+Example error:
+
+Error: Archive creation error
+error creating archive: archive has not been created as it would be empty
+
+This occurs during:
+
+terraform plan
+
+and originates from the Terraform archive_file data source used to build the Lambda deployment package.
+
+Cause
+
+Terraform attempts to archive the Lambda package directory:
+
+.build/lambda_pkg
+
+If the directory exists but contains no files, the archive_file provider refuses to create a zip archive.
+
+This commonly occurs when:
+
+• .build was manually deleted
+• the repository was freshly cloned
+• the build step has not executed yet
+
+Example directory state:
+
+.build/
+  lambda_pkg/
+
+Since the directory is empty, Terraform cannot create the archive.
+
+Diagnosis
+
+Check the contents of the package directory.
+
+ls -a .build/lambda_pkg
+
+If the output is only:
+
+.
+..
+
+then the directory is empty.
+
+Fix
+
+Create a placeholder file so Terraform can archive the directory.
+
+touch .build/lambda_pkg/.placeholder
+
+Verify:
+
+ls -a .build/lambda_pkg
+
+Expected output:
+
+.
+..
+.placeholder
+
+Then rerun Terraform:
+
+cd infra
+terraform plan
+Issue: AWS Rejects Lambda Deployment Zip
+
+Example error:
+
+InvalidParameterValueException:
+Uploaded file must be a non-empty zip
+Cause
+
+Terraform created a zip archive from .build/lambda_pkg, but the directory contained only a placeholder file.
+
+This happens when the Terraform build step was not triggered.
+
+Diagnosis
+
+Check the package contents:
+
+ls .build/lambda_pkg
+
+If you see only:
+
+.placeholder
+
+then the Lambda package was not built.
+
+Fix
+
+Force Terraform to rebuild the Lambda package.
+
+terraform apply -replace=terraform_data.build_lambda_pkg
+
+This reruns the packaging step:
+
+pip install dependencies
+rsync application source
+build lambda package
+create zip
+deploy Lambda
+
+After completion, verify:
+
+ls .build/lambda_pkg
+
+Expected contents:
+
+bloodhound/
+handlers/
+requests/
+boto3/
+...
+
+## Issue: .build Directory Behaving Inconsistently
+
+Rarely, the .build directory may appear to ignore newly created files.
+
+Example symptom:
+
+mkdir .build/lambda_pkg
+ls -R .build
+
+but the directory does not appear.
+
+Cause
+
+This can happen if the directory was deleted while the shell still had an open reference to it:
+
+rm -rf .build
+mkdir .build
+
+The shell may still point to the old directory inode.
+
+Fix
+
+Open a fresh terminal session and recreate the directory.
+
+rm -rf .build
+mkdir -p .build/lambda_pkg
+touch .build/lambda_pkg/.placeholder
+
+Verify:
+
+ls -R .build
+
+Expected:
+
+.build/
+lambda_pkg/
+
+.build/lambda_pkg/
+.placeholder
+Important Note
+
+Terraform references this directory from the infra folder:
+
+../.build/lambda_pkg
+
+The correct path must therefore be:
+
+Bloodhound/.build/lambda_pkg
+Best Practice
+
+If build artifacts were cleaned or the repository was freshly cloned, initialize the package directory before running Terraform:
+
+mkdir -p .build/lambda_pkg
+touch .build/lambda_pkg/.placeholder
+Additional Improvement (Recommended)
+
+To ensure Terraform automatically rebuilds the Lambda package when source code changes, add a source hash trigger to the build resource.
+
+Example:
+
+triggers_replace = {
+  source_hash = sha256(join("", fileset("${path.module}/..", "**/*.py")))
+}
+
+This ensures the packaging step runs whenever Python source files change.
+
+Key Takeaway
+
+Most Lambda packaging failures fall into one of three categories:
+
+Missing modules in the deployment package
+
+Terraform skipping the build step
+
+Terraform attempting to archive an empty directory
+
+Verifying .build/lambda_pkg contents will quickly identify which condition occurred.
+
+---
+
 # Validation Workflow Reminder
 
 After rebuilding the package, rerun the validation workflow:

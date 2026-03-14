@@ -57,25 +57,30 @@ resource "terraform_data" "build_lambda_pkg" {
   # -------------------------------------------------------------------
   # SAFETY TRIGGER
   #
-  # Engineer note:
-  # Terraform sometimes fails to rebuild the Lambda package when new
-  # modules or directories are introduced.
+  # Terraform cannot detect changes to application code when the
+  # Lambda package is built locally via `local-exec`.
   #
-  # This trigger computes a combined hash across ALL Python files
-  # in the repository (excluding build artifacts).
+  # We compute a fingerprint (hash) of all Python runtime files so that any change
+  # to the Lambda source forces this resource to rebuild the package.
   #
-  # If ANY .py file changes, Terraform automatically rebuilds
-  # the Lambda package.
-  #
-  # This prevents stale deployments and eliminates the need for:
-  #
-  # terraform apply -replace=terraform_data.build_lambda_pkg
-  #
+  # Only runtime directories are included to avoid rebuilds caused by
+  # unrelated files (.build, .venv, scripts, tests, etc).
   # -------------------------------------------------------------------
-  python_sources_hash = sha256(join("", [
-    for f in fileset("${path.module}/../", "**/*.py") :
-    filesha256("${path.module}/../${f}")
-  ]))
+  python_sources_hash = sha256(join("", concat(
+
+    # Hash all Python files inside the main application package
+    [
+      for f in fileset("${path.module}/../bloodhound", "**/*.py") :
+      filesha256("${path.module}/../bloodhound/${f}")
+    ],
+
+    # Hash Lambda handler entrypoints
+    [
+      for f in fileset("${path.module}/../handlers", "**/*.py") :
+      filesha256("${path.module}/../handlers/${f}")
+    ]
+
+  )))
 }
 
   provisioner "local-exec" {
