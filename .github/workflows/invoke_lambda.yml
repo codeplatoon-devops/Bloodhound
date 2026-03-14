@@ -48,6 +48,14 @@ jobs:
 
     steps:
 
+    # Temporary debug step to see what GitHub sends in the OIDC token context
+    - name: Print GitHub OIDC context
+      run: |
+        echo "Repository: $GITHUB_REPOSITORY"
+        echo "Ref: $GITHUB_REF"
+        echo "Ref Name: $GITHUB_REF_NAME"
+        echo "Event: $GITHUB_EVENT_NAME"
+
     # Pull repository contents
     - name: Checkout repository
       uses: actions/checkout@v2
