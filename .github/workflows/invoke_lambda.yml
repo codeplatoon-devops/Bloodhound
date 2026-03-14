@@ -58,11 +58,11 @@ jobs:
 
     # Pull repository contents
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     # Configure AWS credentials via GitHub OIDC
     - name: Configure AWS credentials via OIDC
-      uses: aws-actions/configure-aws-credentials@v4
+      uses: aws-actions/configure-aws-credentials@v5
       with:
         role-to-assume: arn:aws:iam::388691194728:role/BloodhoundGitHubInvokeRole
         aws-region: us-west-2
@@ -139,6 +139,27 @@ jobs:
         # -------------------------------------------------------
         echo "::group::Lambda Invocation Metadata"
         cat lambda_meta.json
+        echo "::endgroup::"
+
+
+        # -------------------------------------------------------
+        # Group: Decoded Lambda Logs
+        #
+        # When --log-type Tail is used, AWS embeds the last 4 KB
+        # of Lambda logs inside the LogResult field of the invoke
+        # response. The logs are base64 encoded.
+        #
+        # This step decodes them so they appear directly in the
+        # GitHub Actions output for easier debugging.
+        # -------------------------------------------------------
+        echo "::group::Decoded Lambda Logs"
+
+        if jq -e '.LogResult' lambda_meta.json > /dev/null; then
+          cat lambda_meta.json | jq -r '.LogResult' | base64 -d
+        else
+          echo "No embedded logs returned from Lambda."
+        fi
+
         echo "::endgroup::"
 
 
