@@ -3,15 +3,19 @@ name: Invoke Bloodhound Lambda
 # ------------------------------------------------------------
 # GitHub Actions workflow for invoking the Bloodhound Lambda.
 #
-# Supports:
-# - scheduled runs
-# - manual runs with selectable execution mode
+# This workflow runs ONLY as a scheduled scanner.
+#
+# The purpose of this workflow is to execute the automated
+# Bloodhound infrastructure scan on a fixed schedule.
+#
+# Manual operations (scan / validation / status) are handled
+# by a separate workflow: bloodhound_ops.yml
 #
 # Lambda behavior is determined by:
 #   event["source"]
 #
-# Example payload:
-#   { "source": "scan" }
+# Example payload used here:
+#   { "source": "scheduled" }
 # ------------------------------------------------------------
 
 permissions:
@@ -20,25 +24,16 @@ permissions:
 
 on:
 
+  # ----------------------------------------------------------
   # Scheduled runs (UTC)
-  # 16:00 UTC = 11 AM EST
-  # 04:00 UTC = 11 PM EST
+  #
+  # Bloodhound executes twice per day:
+  #
+  # 16:00 UTC → 11 AM EST
+  # 04:00 UTC → 11 PM EST
+  # ----------------------------------------------------------
   schedule:
     - cron: '0 16,4 * * *'
-
-  # Manual execution trigger with mode selection
-  workflow_dispatch:
-    inputs:
-      mode:
-        description: "Bloodhound run mode"
-        required: true
-        default: "scan"
-        type: choice
-        options:
-          - scan
-          - validation
-          - scheduled
-          - status
 
 jobs:
 
@@ -83,29 +78,22 @@ jobs:
         # -------------------------------------------------------
         # Build Lambda event payload
         #
-        # Manual workflow runs provide the selected execution mode
-        # through the GitHub Actions input parameter:
+        # This workflow always runs as part of the scheduled
+        # infrastructure scan.
         #
-        #   github.event.inputs.mode
+        # Because manual execution has been moved to a separate
+        # workflow (bloodhound_ops.yml), we no longer need to
+        # inspect GitHub workflow inputs.
         #
-        # However, scheduled runs (cron triggers) do not include
-        # workflow inputs in the event payload. Without a fallback,
-        # the value would be empty and Lambda would receive:
+        # The Lambda event payload is therefore deterministic:
         #
-        #   { "source": "" }
+        #   { "source": "scheduled" }
         #
-        # To ensure deterministic behavior, we default the mode to
-        # "scheduled" when the input parameter is not present.
+        # This ensures the Lambda pipeline runs in automated
+        # scan mode every time the cron job executes.
         # -------------------------------------------------------
 
-        # Original implementation (manual runs only)
-        # echo '{"source":"${{ github.event.inputs.mode }}"}' > event.json
-
-        # Determine execution mode with scheduled fallback
-        MODE="${{ github.event.inputs.mode || 'scheduled' }}"
-
-        # Construct Lambda event payload
-        echo "{\"source\":\"$MODE\"}" > event.json
+        echo '{"source":"scheduled"}' > event.json
         cat event.json
 
         echo ""

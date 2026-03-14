@@ -76,7 +76,7 @@ terraform.rc
 # =========================================================
 # GitHub Actions (temporarily disabled for safety)
 # =========================================================
-/.github/workflows/
+#/.github/workflows/
 
 # Lambda local test output
 output.txt
