@@ -59,179 +59,207 @@ jobs:
 
     steps:
 
-    # -------------------------------------------------------
-    # Pull repository contents
-    # -------------------------------------------------------
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      # -------------------------------------------------------
+      # Pull repository contents
+      # -------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
 
-    # -------------------------------------------------------
-    # Authenticate to AWS using GitHub OIDC
-    #
-    # This assumes the IAM role configured for GitHub
-    # so the workflow can invoke the Lambda securely.
-    # -------------------------------------------------------
-    - name: Configure AWS credentials via OIDC
-      uses: aws-actions/configure-aws-credentials@v5
-      with:
-        role-to-assume: arn:aws:iam::388691194728:role/BloodhoundGitHubInvokeRole
-        aws-region: us-west-2
+      # -------------------------------------------------------
+      # Authenticate to AWS using GitHub OIDC
+      #
+      # This assumes the IAM role configured for GitHub
+      # so the workflow can invoke the Lambda securely.
+      # -------------------------------------------------------
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: arn:aws:iam::388691194728:role/BloodhoundGitHubInvokeRole
+          aws-region: us-west-2
 
 
-    # -------------------------------------------------------
-    # Invoke Bloodhound Lambda
-    #
-    # The selected operation from the UI is passed into
-    # the Lambda payload as:
-    #
-    #   { "source": "scan" }
-    #   { "source": "validation" }
-    #   { "source": "status" }
-    #
-    # Lambda uses this value to decide which pipeline
-    # path to execute.
-    # -------------------------------------------------------
-    - name: Invoke Bloodhound Lambda operation
-      run: |
+      # -------------------------------------------------------
+      # Invoke Bloodhound Lambda
+      #
+      # The selected operation from the UI is passed into
+      # the Lambda payload as JSON.
+      #
+      # For standard operations:
+      #
+      #   scan   → { "source": "scan" }
+      #   status → { "source": "status" }
+      #
+      # Validation requires additional guard fields because
+      # the validation handler enforces strict safety checks.
+      #
+      #   validation →
+      #   {
+      #     "source": "validation",
+      #     "mode": "seek_destroy_validation",
+      #     "target_ids": ["validation-instance"]
+      #   }
+      #
+      # -------------------------------------------------------
+      - name: Invoke Bloodhound Lambda operation
+        run: |
+            # fail fast on script errors
+            set -euo pipefail
 
-        # fail fast on script errors
-        set -euo pipefail
+            echo "::group::Bloodhound Lambda Invocation"
 
-        echo "::group::Bloodhound Lambda Invocation"
+            # operation selected in UI
+            MODE="${{ github.event.inputs.mode }}"
 
-        # operation selected in UI
-        MODE="${{ github.event.inputs.mode }}"
+            echo "Selected operation:"
+            echo "$MODE"
 
-        echo "Selected operation:"
-        echo "$MODE"
+            # -------------------------------------------------------
+            # Build Lambda event payload
+            # -------------------------------------------------------
+            if [ "$MODE" = "validation" ]; then
 
-        # build Lambda event payload
-        echo "{\"source\":\"$MODE\"}" > event.json
-        cat event.json
+            echo "Preparing validation payload"
 
-        echo ""
-        echo "Invoking Bloodhound Lambda"
+            cat <<EOF > event.json
+            {
+            "source": "validation",
+            "mode": "seek_destroy_validation",
+            "target_ids": ["validation-instance"]
+            }
+            EOF
 
-        # invoke Lambda
-        aws lambda invoke \
-          --function-name BloodhoundLambdaV2 \
-          --cli-binary-format raw-in-base64-out \
-          --payload file://event.json \
-          --log-type Tail \
-          output.json \
-          --region us-west-2 \
-          > lambda_meta.json
+            else
 
-        echo "::endgroup::"
+            echo "{\"source\":\"$MODE\"}" > event.json
 
+            fi
 
-        # -------------------------------------------------------
-        # Print Lambda response payload
-        # -------------------------------------------------------
-        echo "::group::Lambda Response Payload"
-        cat output.json
-        echo "::endgroup::"
+            # show payload being sent to Lambda
+            cat event.json
+            
+            echo ""
+            echo "Invoking Bloodhound Lambda"
 
-
-        # -------------------------------------------------------
-        # Print Bloodhound operational summary results retunred from Lambda
-        # -------------------------------------------------------
-        echo "::group::Bloodhound Summary"
-
-        echo "Scan Summary:"
-        jq '.scan' output.json || true
-
-        echo ""
-        echo "Budget Snapshot:"
-        jq '.budget' output.json || true
-
-        echo ""
-        echo "Teardown Plan:"
-        jq '.teardown' output.json || true
-
-        echo "::endgroup::"
-
-
-        # -------------------------------------------------------
-        # AWS invocation metadata
-        #
-        # Shows request ID, status code, and other
-        # Lambda invocation information.
-        # -------------------------------------------------------
-        echo "::group::Lambda Invocation Metadata"
-        cat lambda_meta.json
-        echo "::endgroup::"
+            # invoke Lambda
+            aws lambda invoke \
+                --function-name BloodhoundLambdaV2 \
+                --cli-binary-format raw-in-base64-out \
+                --payload file://event.json \
+                --log-type Tail \
+                output.json \
+                --region us-west-2 \
+                > lambda_meta.json
+                
+            echo "::endgroup::" 
 
 
-        # -------------------------------------------------------
-        # Decode Lambda logs returned in the invocation
-        #
-        # AWS embeds the last ~4KB of logs in base64.
-        # -------------------------------------------------------
-        echo "::group::Decoded Lambda Logs"
-
-        if jq -e '.LogResult' lambda_meta.json > /dev/null; then
-          cat lambda_meta.json | jq -r '.LogResult' | base64 -d
-        else
-          echo "No embedded logs returned from Lambda."
-        fi
-
-        echo "::endgroup::"
+            # -------------------------------------------------------
+            # Print Lambda response payload
+            # -------------------------------------------------------
+            echo "::group::Lambda Response Payload"
+            cat output.json
+            echo "::endgroup::"
 
 
-        # -------------------------------------------------------
-        # Detect Lambda failures
-        #
-        # Ensures CI fails if Lambda execution fails.
-        # -------------------------------------------------------
-        echo "::group::Lambda Error Check"
+            # -------------------------------------------------------
+            # Print Bloodhound operational summary results returned from Lambda
+            # -------------------------------------------------------
+            echo "::group::Bloodhound Summary"
 
-        if grep -q "FunctionError" lambda_meta.json; then
-          echo "ERROR: Lambda reported FunctionError"
-          exit 1
-        fi
+            echo "Scan Summary:"
+            jq '.scan' output.json || true
 
-        if ! grep -q '"StatusCode": 200' lambda_meta.json; then
-          echo "ERROR: Lambda invocation returned non-200 status"
-          exit 1
-        fi
+            echo ""
+            echo "Budget Snapshot:"
+            jq '.budget' output.json || true
 
-        echo "Lambda invocation completed successfully"
+            echo ""
+            echo "Teardown Plan:"
+            jq '.teardown' output.json || true
 
-        echo "::endgroup::"
+            echo "::endgroup::"
 
 
-    # -------------------------------------------------------
-    # Pull recent logs from CloudWatch
-    # -------------------------------------------------------
-    - name: Fetch Lambda Logs
-      run: |
+            # -------------------------------------------------------
+            # AWS invocation metadata
+            #
+            # Shows request ID, status code, and other
+            # Lambda invocation information.
+            # -------------------------------------------------------
+            echo "::group::Lambda Invocation Metadata"
+            cat lambda_meta.json
+            echo "::endgroup::"
 
-        echo "::group::Lambda CloudWatch Logs"
 
-        LOG_GROUP="/aws/lambda/BloodhoundLambdaV2"
+            # -------------------------------------------------------
+            # Decode Lambda logs returned in the invocation
+            #
+            # AWS embeds the last ~4KB of logs in base64.
+            # -------------------------------------------------------
+            echo "::group::Decoded Lambda Logs"
 
-        # find most recent log stream
-        LOG_STREAM=$(aws logs describe-log-streams \
-          --log-group-name $LOG_GROUP \
-          --order-by LastEventTime \
-          --descending \
-          --limit 1 \
-          --query 'logStreams[0].logStreamName' \
-          --output text)
+            if jq -e '.LogResult' lambda_meta.json > /dev/null; then
+                cat lambda_meta.json | jq -r '.LogResult' | base64 -d
+            else
+                echo "No embedded logs returned from Lambda."
+            fi
 
-        echo "Latest log stream:"
-        echo $LOG_STREAM
+            echo "::endgroup::"
 
-        echo ""
-        echo "Recent log events:"
 
-        aws logs get-log-events \
-          --log-group-name $LOG_GROUP \
-          --log-stream-name $LOG_STREAM \
-          --limit 50 \
-          --query 'events[*].message' \
-          --output text
+            # -------------------------------------------------------
+            # Detect Lambda failures
+            #
+            # Ensures CI fails if Lambda execution fails.
+            # -------------------------------------------------------
+            echo "::group::Lambda Error Check"
 
-        echo "::endgroup::"
+            if grep -q "FunctionError" lambda_meta.json; then
+                echo "ERROR: Lambda reported FunctionError"
+                exit 1
+            fi
+
+            if ! grep -q '"StatusCode": 200' lambda_meta.json; then
+                echo "ERROR: Lambda invocation returned non-200 status"
+                exit 1
+            fi
+
+            echo "Lambda invocation completed successfully"
+
+            echo "::endgroup::"
+
+
+      # -------------------------------------------------------
+      # Pull recent logs from CloudWatch
+      # -------------------------------------------------------
+      - name: Fetch Lambda Logs
+        run: |
+
+          echo "::group::Lambda CloudWatch Logs"
+
+          LOG_GROUP="/aws/lambda/BloodhoundLambdaV2"
+
+          # find most recent log stream
+          LOG_STREAM=$(aws logs describe-log-streams \
+            --log-group-name $LOG_GROUP \
+            --order-by LastEventTime \
+            --descending \
+            --limit 1 \
+            --query 'logStreams[0].logStreamName' \
+            --output text)
+
+          echo "Latest log stream:"
+          echo $LOG_STREAM
+
+          echo ""
+          echo "Recent log events:"
+
+          aws logs get-log-events \
+            --log-group-name $LOG_GROUP \
+            --log-stream-name $LOG_STREAM \
+            --limit 50 \
+            --query 'events[*].message' \
+            --output text
+
+          echo "::endgroup::"
