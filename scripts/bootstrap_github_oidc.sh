@@ -6,41 +6,70 @@
 #
 # PURPOSE
 #
-# This script bootstraps AWS infrastructure required for
-# GitHub Actions to securely invoke the Bloodhound Lambda
-# using OpenID Connect (OIDC).
+# This script bootstraps the AWS infrastructure required
+# for GitHub Actions to securely invoke the Bloodhound
+# Lambda function using OpenID Connect (OIDC).
 #
-# It eliminates the need for long-lived AWS credentials
-# stored in GitHub repository secrets.
+# Using OIDC eliminates the need to store long-lived AWS
+# credentials (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY)
+# inside GitHub repository secrets.
 #
-# After this script runs successfully, GitHub Actions will
-# authenticate to AWS using temporary credentials issued
-# via IAM role assumption.
+# Instead, GitHub exchanges a short-lived OIDC token with
+# AWS STS to assume an IAM role and obtain temporary
+# credentials during workflow execution.
 #
 #
-# RESULTING ARCHITECTURE
+# RESULTING AUTHENTICATION FLOW
 #
-# GitHub Actions
-#       ↓
-# GitHub OIDC Token
-#       ↓
+# GitHub Actions workflow
+#        ↓
+# GitHub OIDC token
+#        ↓
 # AWS STS AssumeRoleWithWebIdentity
-#       ↓
+#        ↓
 # BloodhoundGitHubInvokeRole
-#       ↓
-# Temporary AWS Credentials
-#       ↓
+#        ↓
+# Temporary AWS credentials
+#        ↓
 # Invoke BloodhoundLambdaV2
 #
 #
-# WHAT THIS SCRIPT DOES
+# WHAT THIS SCRIPT CONFIGURES
 #
-# 1. Detects whether the GitHub OIDC provider exists
-# 2. Creates the provider if it does not exist
-# 3. Creates an IAM role for GitHub Actions
-# 4. Configures a trust relationship with the GitHub repo
-# 5. Attaches permissions allowing Lambda invocation
-# 6. Outputs the role ARN for GitHub workflow configuration
+# 1. Ensures the GitHub OIDC provider exists in the AWS account
+# 2. Creates or updates the IAM role used by GitHub Actions
+# 3. Configures the trust policy for GitHub OIDC
+# 4. Attaches permissions allowing the Lambda to be invoked
+# 5. Outputs the role ARN for GitHub workflow configuration
+#
+#
+# IMPORTANT DESIGN CHOICE
+#
+# The trust policy allows:
+#
+#     repo:*/Bloodhound:*
+#
+# This permits GitHub workflows running from forks of the
+# Bloodhound repository to assume the IAM role.
+#
+# This is necessary because contributors typically run CI
+# from their personal forks before opening pull requests
+# to the canonical repository:
+#
+#     codeplatoon-devops/Bloodhound
+#
+# Without this rule, AWS would reject OIDC tokens issued
+# from forked repositories because the repository owner
+# would not match the organization name.
+#
+#
+# SCRIPT BEHAVIOR
+#
+# This script is intentionally idempotent:
+#
+# • Safe to run multiple times
+# • Existing infrastructure will not be duplicated
+# • IAM trust policy will be updated if the role exists
 #
 #
 # PREREQUISITES
@@ -52,26 +81,45 @@
 #
 # VERIFY AWS AUTHENTICATION
 #
-# aws sts get-caller-identity
+#     aws sts get-caller-identity
 #
 #
 # HOW TO RUN
 #
-# chmod +x scripts/bootstrap_github_oidc.sh
-# ./scripts/bootstrap_github_oidc.sh
+#     chmod +x scripts/bootstrap_github_oidc.sh
+#     ./scripts/bootstrap_github_oidc.sh
 #
 #
 # AFTER RUNNING
 #
 # Update the GitHub Actions workflow to use:
 #
-# aws-actions/configure-aws-credentials@v4
+#     aws-actions/configure-aws-credentials@v4
 #
 # with the role ARN printed by this script.
 #
 # =========================================================
 
+
+# ---------------------------------------------------------
+# Cleanup temporary IAM policy artifacts
+#
+# The AWS CLI requires policy documents to be supplied as
+# files when creating IAM roles and attaching policies.
+#
+# This script dynamically generates the following files:
+#   trust-policy.json
+#   lambda-policy.json
+#
+# These files are temporary artifacts and should never be
+# committed to the repository.
+#
+# The EXIT trap ensures they are automatically removed when
+# the script finishes, regardless of whether execution
+# succeeds, fails, or is interrupted.
+# ---------------------------------------------------------
 trap "rm -f trust-policy.json lambda-policy.json" EXIT
+
 set -euo pipefail
 
 # Disable AWS CLI pager so scripts never hang
@@ -147,7 +195,22 @@ fi
 
 
 # ---------------------------------------------------------
-# 2. Create trust policy allowing GitHub to assume role
+# 2. Generate GitHub OIDC trust policy
+#
+# The trust relationship allows GitHub Actions workflows
+# to assume this IAM role using OIDC.
+#
+# The subject condition:
+#
+#     repo:*/Bloodhound:ref:refs/heads/main
+#
+# restricts access to repositories named "Bloodhound"
+# and their forks, and only allows workflows running
+# from the main branch of that repository to assume
+# the role.
+#
+# This allows contributors to run CI from forks while
+# keeping the role limited to the Bloodhound project.
 # ---------------------------------------------------------
 
 echo ""
@@ -164,8 +227,11 @@ cat <<EOF > trust-policy.json
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+        },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:$GITHUB_ORG/$GITHUB_REPO:*"
+          "token.actions.githubusercontent.com:sub": "repo:*/$GITHUB_REPO:ref:refs/heads/main"
         }
       }
     }
@@ -175,14 +241,22 @@ EOF
 
 
 # ---------------------------------------------------------
-# 3. Create IAM role for GitHub Actions
+# 3. Create or update IAM role for GitHub Actions
+#
+# If the role already exists, the trust policy is updated
+# to ensure it reflects the current repository policy.
 # ---------------------------------------------------------
 
 echo ""
 echo "Creating IAM role: $ROLE_NAME"
 
 if aws iam get-role --role-name $ROLE_NAME > /dev/null 2>&1; then
-  echo "Role already exists."
+  echo "Role already exists. Updating trust policy..."
+
+  aws iam update-assume-role-policy \
+    --role-name $ROLE_NAME \
+    --policy-document file://trust-policy.json
+
 else
 
   aws iam create-role \
@@ -200,7 +274,11 @@ fi
 
 
 # ---------------------------------------------------------
-# 4. Create policy allowing Lambda invocation
+# 4. Configure IAM permissions for Lambda invocation
+#
+# The role requires permission to invoke the Bloodhound
+# Lambda function and optionally read its CloudWatch logs
+# for debugging CI failures.
 # ---------------------------------------------------------
 
 echo ""
@@ -241,7 +319,10 @@ echo "Policy attached."
 
 
 # ---------------------------------------------------------
-# 5. Output role ARN for GitHub workflow configuration
+# 5. Output IAM role ARN for GitHub workflow configuration
+#
+# This ARN must be referenced in the GitHub Actions
+# workflow using the configure-aws-credentials action.
 # ---------------------------------------------------------
 
 ROLE_ARN="arn:aws:iam::$ACCOUNT_ID:role/$ROLE_NAME"
