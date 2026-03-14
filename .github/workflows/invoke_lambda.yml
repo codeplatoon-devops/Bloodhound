@@ -143,6 +143,27 @@ jobs:
 
 
         # -------------------------------------------------------
+        # Group: Decoded Lambda Logs
+        #
+        # When --log-type Tail is used, AWS embeds the last 4 KB
+        # of Lambda logs inside the LogResult field of the invoke
+        # response. The logs are base64 encoded.
+        #
+        # This step decodes them so they appear directly in the
+        # GitHub Actions output for easier debugging.
+        # -------------------------------------------------------
+        echo "::group::Decoded Lambda Logs"
+
+        if jq -e '.LogResult' lambda_meta.json > /dev/null; then
+          cat lambda_meta.json | jq -r '.LogResult' | base64 -d
+        else
+          echo "No embedded logs returned from Lambda."
+        fi
+
+        echo "::endgroup::"
+
+
+        # -------------------------------------------------------
         # Group: Lambda Failure Detection
         #
         # Prevents CI pipelines from silently succeeding if
