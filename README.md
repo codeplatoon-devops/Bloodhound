@@ -653,3 +653,16 @@ Terraform deployment may be out of sync.
 If Slack commands stop responding after deployment, see:
 
 `docs/troubleshooting_slack_commands.md`
+
+## ⚙️ GitHub Automation
+
+Bloodhound includes a GitHub Actions workflow that can:
+
+• run scheduled infrastructure scans  
+• trigger validation workflows  
+• invoke the Bloodhound Lambda scanner  
+• stream Lambda logs directly into CI output  
+
+For full details see:
+
+➡ docs/github_actions.md

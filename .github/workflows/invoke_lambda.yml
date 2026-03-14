@@ -1,33 +1,188 @@
 name: Invoke Bloodhound Lambda
 
+# ------------------------------------------------------------
+# GitHub Actions workflow for invoking the Bloodhound Lambda.
+#
+# Supports:
+# - scheduled runs
+# - manual runs with selectable execution mode
+#
+# Lambda behavior is determined by:
+#   event["source"]
+#
+# Example payload:
+#   { "source": "scan" }
+# ------------------------------------------------------------
+
 on:
+
+  # Scheduled runs (UTC)
+  # 16:00 UTC = 11 AM EST
+  # 04:00 UTC = 11 PM EST
   schedule:
-    # Run at 11 AM and 11 PM EST (4 PM and 4 AM UTC)
     - cron: '0 16,4 * * *'
+
+  # Manual execution trigger with mode selection
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Bloodhound run mode"
+        required: true
+        default: "scan"
+        type: choice
+        options:
+          - scan
+          - validation
+          - scheduled
+          - status
 
 jobs:
+
+  # GitHub runner job that invokes the Lambda
   invoke-lambda:
     runs-on: ubuntu-latest
 
     steps:
+
+    # Pull repository contents
     - name: Checkout repository
       uses: actions/checkout@v2
 
+    # Configure AWS credentials
     - name: Set up AWS CLI
       uses: aws-actions/configure-aws-credentials@v1
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        # IMPORTANT:
-        # This region must match the region used by Terraform
-        # in infra/provider.tf where the Lambda is deployed.
         aws-region: us-west-2
 
+    # Invoke Bloodhound Lambda
     - name: Invoke Bloodhound Lambda function
-        # IMPORTANT:
-        # This region must match the Lambda deployment region.
       run: |
-        echo '{}' > test_event.json
-        aws lambda invoke --function-name BloodhoundLambdaV2 --cli-binary-format raw-in-base64-out --payload file://test_event.json output.txt --region us-west-2
-        cat output.txt
+
+        set -euo pipefail  # fail fast: exit on errors, undefined vars, or pipeline failures
+
+        # -------------------------------------------------------
+        # Group: Invocation Setup
+        # -------------------------------------------------------
+        echo "::group::Bloodhound Lambda Invocation"
+
+        echo "Building Lambda event payload"
+
+        # -------------------------------------------------------
+        # Build Lambda event payload
+        #
+        # Manual workflow runs provide the selected execution mode
+        # through the GitHub Actions input parameter:
+        #
+        #   github.event.inputs.mode
+        #
+        # However, scheduled runs (cron triggers) do not include
+        # workflow inputs in the event payload. Without a fallback,
+        # the value would be empty and Lambda would receive:
+        #
+        #   { "source": "" }
+        #
+        # To ensure deterministic behavior, we default the mode to
+        # "scheduled" when the input parameter is not present.
+        # -------------------------------------------------------
+
+        # Original implementation (manual runs only)
+        # echo '{"source":"${{ github.event.inputs.mode }}"}' > event.json
+
+        # Determine execution mode with scheduled fallback
+        MODE="${{ github.event.inputs.mode || 'scheduled' }}"
+
+        # Construct Lambda event payload
+        echo "{\"source\":\"$MODE\"}" > event.json
+        cat event.json
+
+        echo ""
+        echo "Invoking Bloodhound Lambda"
+
+        # Invoke Lambda
+        # output.json      -> Lambda response payload
+        # lambda_meta.json -> AWS CLI invocation metadata
+        aws lambda invoke \
+          --function-name BloodhoundLambdaV2 \
+          --cli-binary-format raw-in-base64-out \
+          --payload file://event.json \
+          --log-type Tail \
+          output.json \
+          --region us-west-2 \
+          > lambda_meta.json
+
+        echo "::endgroup::"
+
+
+        # -------------------------------------------------------
+        # Group: Lambda Response
+        # -------------------------------------------------------
+        echo "::group::Lambda Response Payload"
+        cat output.json
+        echo "::endgroup::"
+
+
+        # -------------------------------------------------------
+        # Group: Invocation Metadata
+        # -------------------------------------------------------
+        echo "::group::Lambda Invocation Metadata"
+        cat lambda_meta.json
+        echo "::endgroup::"
+
+
+        # -------------------------------------------------------
+        # Group: Lambda Failure Detection
+        #
+        # Prevents CI pipelines from silently succeeding if
+        # Lambda execution fails.
+        # -------------------------------------------------------
+        echo "::group::Lambda Error Check"
+
+        # Detect runtime Lambda errors
+        if grep -q "FunctionError" lambda_meta.json; then
+          echo "ERROR: Lambda reported FunctionError"
+          exit 1
+        fi
+
+        # Detect unexpected status codes
+        if ! grep -q '"StatusCode": 200' lambda_meta.json; then
+          echo "ERROR: Lambda invocation returned non-200 status"
+          exit 1
+        fi
+
+        echo "Lambda invocation completed successfully"
+        echo "===== Invocation Complete ====="
+
+        echo "::endgroup::"
+
+    - name: Fetch Lambda Logs
+      run: |
+
+        echo "::group::Lambda CloudWatch Logs"
+
+        LOG_GROUP="/aws/lambda/BloodhoundLambdaV2"
+
+        # Find latest log stream
+        LOG_STREAM=$(aws logs describe-log-streams \
+          --log-group-name $LOG_GROUP \
+          --order-by LastEventTime \
+          --descending \
+          --limit 1 \
+          --query 'logStreams[0].logStreamName' \
+          --output text)
+
+        echo "Latest log stream:"
+        echo $LOG_STREAM
+
+        echo ""
+        echo "Recent log events:"
+
+        aws logs get-log-events \
+          --log-group-name $LOG_GROUP \
+          --log-stream-name $LOG_STREAM \
+          --limit 50 \
+          --query 'events[*].message' \
+          --output text
+
+        echo "::endgroup::"
