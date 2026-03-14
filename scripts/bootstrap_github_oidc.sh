@@ -197,20 +197,40 @@ fi
 # ---------------------------------------------------------
 # 2. Generate GitHub OIDC trust policy
 #
-# The trust relationship allows GitHub Actions workflows
-# to assume this IAM role using OIDC.
+# GitHub OIDC Trust Policy (Strict Repo Control)
 #
-# The subject condition:
+# This IAM role allows GitHub Actions workflows to assume
+# the role using OIDC (sts:AssumeRoleWithWebIdentity).
 #
-#     repo:*/Bloodhound:ref:refs/heads/main
+# SECURITY MODEL
 #
-# restricts access to repositories named "Bloodhound"
-# and their forks, and only allows workflows running
-# from the main branch of that repository to assume
-# the role.
+# Access is restricted to explicitly listed repositories
+# instead of allowing all repositories named "Bloodhound".
 #
-# This allows contributors to run CI from forks while
-# keeping the role limited to the Bloodhound project.
+# Currently allowed repositories:
+#
+#   • codeplatoon-devops/Bloodhound
+#   • mmccla1n/Bloodhound
+#
+# Branch restrictions:
+#
+#   • The upstream repository is restricted to the main branch
+#   • The maintainer fork allows all branches for development
+#
+# CONTRIBUTOR NOTE
+#
+# If another contributor wants to run GitHub Actions from
+# their fork of the repository, their fork must be added
+# to the "sub" condition below using the format:
+#
+#   repo:<github-user>/Bloodhound:ref:refs/heads/*
+#
+# Example:
+#
+#   repo:janedoe/Bloodhound:ref:refs/heads/*
+#
+# This keeps the role secure while still allowing approved
+# forks to run CI workflows.
 # ---------------------------------------------------------
 
 echo ""
@@ -231,7 +251,10 @@ cat <<EOF > trust-policy.json
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:*/$GITHUB_REPO:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub": [
+            "repo:codeplatoon-devops/Bloodhound:ref:refs/heads/main",
+            "repo:mmccla1n/Bloodhound:ref:refs/heads/*"
+          ]
         }
       }
     }
