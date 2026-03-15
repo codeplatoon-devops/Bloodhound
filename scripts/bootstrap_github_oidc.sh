@@ -315,7 +315,9 @@ cat <<EOF > lambda-policy.json
       "Sid": "InvokeBloodhoundLambda",
       "Effect": "Allow",
       "Action": [
-        "lambda:InvokeFunction"
+        "lambda:InvokeFunction",
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration"
       ],
       "Resource": "arn:aws:lambda:$AWS_REGION:$ACCOUNT_ID:function:$LAMBDA_NAME"
     },
