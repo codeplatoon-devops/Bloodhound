@@ -1,4 +1,5 @@
 name: Bloodhound Operations
+run-name: Bloodhound Operations — ${{ github.event.inputs.mode }}
 
 # ------------------------------------------------------------
 # Manual Bloodhound operations workflow
@@ -111,29 +112,40 @@ jobs:
             # operation selected in UI
             MODE="${{ github.event.inputs.mode }}"
 
-            echo "Selected operation:"
-            echo "$MODE"
+            echo ""
+            echo "========================================"
+            echo "Bloodhound Operation: $MODE"
+            echo "========================================"
+            echo ""
 
             # -------------------------------------------------------
-            # Build Lambda event payload
+            # Validation Mode
+            #
+            # Run the full teardown validation workflow instead of
+            # manually constructing a Lambda payload.
+            #
+            # The validation script handles:
+            #   • Terraform test instance creation
+            #   • Lambda invocation
+            #   • teardown verification
+            #   • safety checks
             # -------------------------------------------------------
             if [ "$MODE" = "validation" ]; then
 
-            echo "Preparing validation payload"
+            echo "Running full teardown validation workflow"
 
-            cat <<EOF > event.json
-            {
-            "source": "validation",
-            "mode": "seek_destroy_validation",
-            "target_ids": ["validation-instance"]
-            }
-            EOF
+            chmod +x tools/run_validation_workflow.sh
+            ./tools/run_validation_workflow.sh
 
-            else
-
-            echo "{\"source\":\"$MODE\"}" > event.json
+            exit 0
 
             fi
+
+
+            # -------------------------------------------------------
+            # Standard Lambda operations (scan / status)
+            # -------------------------------------------------------
+            echo "{\"source\":\"$MODE\"}" > event.json
 
             # show payload being sent to Lambda
             cat event.json
@@ -263,3 +275,17 @@ jobs:
             --output text
 
           echo "::endgroup::"
+
+      # -------------------------------------------------------
+      # Upload validation logs
+      #
+      # If validation mode ran, upload the generated
+      # validation logs as CI artifacts so engineers
+      # can download them from the workflow run page.
+      # -------------------------------------------------------
+      - name: Upload validation logs
+        if: always() && github.event.inputs.mode == 'validation'
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-logs
+          path: logs/validation
