@@ -251,6 +251,9 @@ echo ""
 log "Step 1: Creating disposable EC2 instance"
 echo ""
 
+# Initialize Terraform (required for CI environments)
+terraform -chdir=infra init -input=false
+
 terraform -chdir=infra apply \
   -var "validation_run_id=$RUN_ID" \
   -var "enable_validation_resources=true" \
