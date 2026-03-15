@@ -96,30 +96,41 @@ LAMBDA_ENV=$(aws lambda get-function-configuration \
 echo "✓ Retrieved Lambda environment variables"
 
 # ------------------------------------------------------------
-# Step 3 — Compare Lambda env variables with local .env
+# Step 3 — Validate Lambda environment variables
 #
-# This detects configuration drift between:
+# LOCAL MODE
+#   Compare deployed Lambda variables against local .env
 #
-# Terraform configuration
-# ↓
-# Lambda runtime configuration
+# CI MODE (GitHub Actions)
+#   Verify required variables exist in Lambda
 #
-# If values differ, Terraform likely needs to be re-applied.
+# GitHub automatically sets:
+#   CI=true
 # ------------------------------------------------------------
 echo ""
-echo "Comparing critical environment variables with .env..."
+echo "Validating critical environment variables..."
 
-# Load variables from local .env
-source .env
+# ------------------------------------------------------------
+# Determine execution mode
+# ------------------------------------------------------------
+if [ "${CI:-}" = "true" ]; then
+  MODE="ci"
+else
+  MODE="local"
+fi
 
+
+# ------------------------------------------------------------
+# LOCAL MODE VALIDATION
+#
+# Compare deployed Lambda variables against local .env
+# ------------------------------------------------------------
 check_env_match () {
 
   VAR_NAME=$1
 
-  # expected value from local .env
   EXPECTED=${!VAR_NAME}
 
-  # actual value deployed in Lambda
   ACTUAL=$(echo "$LAMBDA_ENV" | jq -r ".${VAR_NAME}")
 
   if [ "$EXPECTED" != "$ACTUAL" ]; then
@@ -137,13 +148,56 @@ check_env_match () {
   fi
 }
 
-# Validate a small set of critical variables
-check_env_match APPLY_CHANGES
-check_env_match TEARDOWN_SIMULATE
-check_env_match SLACK_SCAN_CHANNEL_ID
-check_env_match SLACK_ALERT_CHANNEL_ID
 
-echo "✓ Environment variables match expected configuration"
+# ------------------------------------------------------------
+# CI MODE VALIDATION
+#
+# Ensure required variables exist in Lambda
+# ------------------------------------------------------------
+check_env_exists () {
+
+  VAR_NAME=$1
+
+  ACTUAL=$(echo "$LAMBDA_ENV" | jq -r ".${VAR_NAME}")
+
+  if [ "$ACTUAL" = "null" ] || [ -z "$ACTUAL" ]; then
+
+    echo ""
+    echo "ERROR: Lambda environment variable missing"
+    echo "Variable: $VAR_NAME"
+    echo ""
+    exit 1
+
+  fi
+}
+
+
+# ------------------------------------------------------------
+# Execute validation
+# ------------------------------------------------------------
+if [ "$MODE" = "local" ]; then
+
+  echo "Local mode detected — validating against .env"
+
+  source .env
+
+  check_env_match APPLY_CHANGES
+  check_env_match TEARDOWN_SIMULATE
+  check_env_match SLACK_SCAN_CHANNEL_ID
+  check_env_match SLACK_ALERT_CHANNEL_ID
+
+else
+
+  echo "CI mode detected — verifying variables exist in Lambda"
+
+  check_env_exists APPLY_CHANGES
+  check_env_exists TEARDOWN_SIMULATE
+  check_env_exists SLACK_SCAN_CHANNEL_ID
+  check_env_exists SLACK_ALERT_CHANNEL_ID
+
+fi
+
+echo "✓ Environment variable validation passed"
 
 # ------------------------------------------------------------
 # Step 4 — Display deployed Lambda environment variables
