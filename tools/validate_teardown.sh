@@ -101,6 +101,14 @@ if [ -f ".env" ]; then
   source .env
 fi
 
+# --------------------------------------------------
+# CI fallback for account validation
+# In CI, .env is not available. Use AWS STS to determine 
+# the current account ID from the authenticated AWS credentials.
+# --------------------------------------------------
+EXPECTED_AWS_ACCOUNT_ID="${EXPECTED_AWS_ACCOUNT_ID:-$(aws sts get-caller-identity \
+  --query Account \
+  --output text)}"
 
 # ------------------------------------------------------------------
 # AWS Account Safety Guard

@@ -27,7 +27,17 @@
 # infrastructure deployment issues.
 # ------------------------------------------------------------
 
-set -e  # exit immediately if any command fails
+set -euo pipefail # Exit on error, treat unset variables as errors, and fail on pipeline errors
+
+MODE="${MODE:-}"
+
+if [ -z "$MODE" ]; then
+  if [ "${CI:-}" = "true" ]; then
+    MODE="ci"
+  else
+    MODE="local"
+  fi
+fi
 
 # ------------------------------------------------------------
 # Disable AWS CLI pager
@@ -205,29 +215,23 @@ echo "✓ Environment variable validation passed"
 # Local mode prints the full environment variables directly
 # from AWS for developer inspection.
 #
-# CI mode prints the variables but masks sensitive values
-# such as tokens and secrets to prevent credential leakage
-# in GitHub Actions logs.
+# CI mode skips printing the variables in GitHub Actions logs.
 # ------------------------------------------------------------
 echo ""
-echo "Deployed Lambda environment variables:"
 
 if [ "$MODE" = "ci" ]; then
 
-  # Use the already-fetched environment variables and mask secrets
-  echo "$LAMBDA_ENV" | jq 'with_entries(
-    if (.key | test("SECRET|TOKEN"))
-    then .value="***MASKED***"
-    else .
-    end
-  )'
+  echo "CI mode detected — skipping environment variable display"
 
 else
-  # Local developer mode: show full values
+
+  echo "Deployed Lambda environment variables:"
+
   aws lambda get-function-configuration \
     --function-name "$FUNCTION_NAME" \
     --region "$REGION" \
     --query 'Environment.Variables'
+
 fi
 
 echo ""

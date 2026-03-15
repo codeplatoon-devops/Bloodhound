@@ -317,7 +317,8 @@ cat <<EOF > lambda-policy.json
       "Action": [
         "lambda:InvokeFunction",
         "lambda:GetFunction",
-        "lambda:GetFunctionConfiguration"
+        "lambda:GetFunctionConfiguration",
+        "lambda:GetFunctionUrlConfig"
       ],
       "Resource": "arn:aws:lambda:$AWS_REGION:$ACCOUNT_ID:function:$LAMBDA_NAME"
     },
@@ -325,7 +326,7 @@ cat <<EOF > lambda-policy.json
       "Sid": "ReadLambdaLogs",
       "Effect": "Allow",
       "Action": [
-        "logs:DescribeLogStreams",
+        "logs:DescribeLogGroups",
         "logs:DescribeLogStreams",
         "logs:GetLogEvents"
       ],
