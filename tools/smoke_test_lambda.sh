@@ -202,15 +202,33 @@ echo "✓ Environment variable validation passed"
 # ------------------------------------------------------------
 # Step 4 — Display deployed Lambda environment variables
 #
-# This provides a quick visual check for engineers.
+# Local mode prints the full environment variables directly
+# from AWS for developer inspection.
+#
+# CI mode prints the variables but masks sensitive values
+# such as tokens and secrets to prevent credential leakage
+# in GitHub Actions logs.
 # ------------------------------------------------------------
 echo ""
 echo "Deployed Lambda environment variables:"
 
-aws lambda get-function-configuration \
-  --function-name "$FUNCTION_NAME" \
-  --region "$REGION" \
-  --query 'Environment.Variables'
+if [ "$MODE" = "ci" ]; then
+
+  # Use the already-fetched environment variables and mask secrets
+  echo "$LAMBDA_ENV" | jq 'with_entries(
+    if (.key | test("SECRET|TOKEN"))
+    then .value="***MASKED***"
+    else .
+    end
+  )'
+
+else
+  # Local developer mode: show full values
+  aws lambda get-function-configuration \
+    --function-name "$FUNCTION_NAME" \
+    --region "$REGION" \
+    --query 'Environment.Variables'
+fi
 
 echo ""
 echo "✓ Environment variables retrieved"

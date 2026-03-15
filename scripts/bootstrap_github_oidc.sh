@@ -326,6 +326,7 @@ cat <<EOF > lambda-policy.json
       "Effect": "Allow",
       "Action": [
         "logs:DescribeLogStreams",
+        "logs:DescribeLogStreams",
         "logs:GetLogEvents"
       ],
       "Resource": "*"
