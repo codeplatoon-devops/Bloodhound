@@ -123,38 +123,123 @@ This indicates the packaging step did not run.
 
 # Fix
 
-Force Terraform to rebuild the Lambda package.
+If the `.build` directory was deleted or corrupted, Terraform may attempt to deploy an empty Lambda package.
 
-Run:
+The correct recovery procedure is to **force Terraform to rebuild the Lambda package**.
 
-```
+From the `infra` directory run:
+
 terraform apply -replace=terraform_data.build_lambda_pkg
-```
 
-Terraform will then execute the build script again:
+This forces the packaging step to run again regardless of trigger hashes.
 
-```
+During execution Terraform should run the packaging script:
+
 rm -rf .build
-pip install dependencies
-rsync bloodhound source
+mkdir -p .build/lambda_pkg
+pip install -r requirements.txt -t .build/lambda_pkg
+rsync application source
 create lambda zip
 deploy updated Lambda
-```
 
-You should see output similar to:
+Expected Terraform output:
 
-```
 terraform_data.build_lambda_pkg: Provisioning with 'local-exec'
 Prepared package dir: .build/lambda_pkg
-```
+Downloading dependencies
+Installing slack_sdk
+Creating deployment archive
 
-After the rebuild, verify the package:
+If the `pip install` step does not appear in the output, the packaging script did not run.
 
-```
-ls .build/lambda_pkg/bloodhound
-```
+After the rebuild completes, verify the package contents:
 
-The full module tree should now be present.
+ls ../.build/lambda_pkg
+
+Expected output should include the application and dependencies:
+
+bloodhound/
+handlers/
+slack_sdk/
+boto3/
+requests/
+
+You can also inspect the deployed archive:
+
+unzip -l ../.build/bloodhound_lambda_v2.zip | head
+
+The archive should contain the application code and dependencies at the root.
+
+Post-Recovery Verification
+
+After rebuilding the Lambda package, confirm that the deployment works correctly.
+
+Step 1 — Smoke Test the Lambda
+
+After Terraform completes successfully, you should see the Lambda Function URL in the outputs:
+
+bloodhound_lambda_url = "https://<lambda-id>.lambda-url.us-west-2.on.aws/"
+
+Run a quick test request:
+
+curl https://<lambda-id>.lambda-url.us-west-2.on.aws/
+
+Example successful response:
+
+{
+  "regions": ["us-east-1","us-east-2","us-west-1","us-west-2"],
+  "scan": {
+    "candidates_total": 56,
+    "kept_total": 1
+  },
+  "ok": true,
+  "teardown": {
+    "planned_actions": 56,
+    "execution": null,
+    "targets_filter": null,
+    "apply_changes": false,
+    "simulate": true
+  },
+  "budget": {
+    "over_budget_threshold_met": true,
+    "projected_month_end_spend_usd": 2753.1269,
+    "dynamic_monthly_allowance_usd": 0.0
+  }
+}
+
+A response like this confirms:
+
+• Lambda successfully executed
+• Application modules loaded correctly
+• Dependencies were packaged correctly
+• Infrastructure scan logic is functioning
+
+If the request fails with an import error, inspect the Lambda logs in CloudWatch.
+
+Step 2 — Run the Validation Workflow
+
+Once the Lambda smoke test succeeds, run the full validation workflow.
+
+./tools/run_validation_workflow.sh
+
+This workflow verifies:
+
+• Lambda deployment
+• infrastructure scanning
+• teardown planning logic
+• Slack command integrations
+
+This step ensures the entire Bloodhound pipeline functions end-to-end after deployment.
+
+Expected Outcome
+
+If all steps succeed:
+
+• Terraform deployment succeeds
+• Lambda responds correctly
+• Validation workflow completes without errors
+
+At this point the infrastructure deployment can be considered healthy and operational.
 
 ---
 

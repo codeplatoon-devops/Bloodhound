@@ -1,4 +1,5 @@
 name: Invoke Bloodhound Lambda
+run-name: Bloodhound Operations — ${{ github.event.inputs.mode }}
 
 # ------------------------------------------------------------
 # GitHub Actions workflow for invoking the Bloodhound Lambda.
