@@ -101,6 +101,11 @@ if [ -f ".env" ]; then
   source .env
 fi
 
+# CI fallback values
+APPLY_CHANGES="${APPLY_CHANGES:-false}"
+TEARDOWN_SIMULATE="${TEARDOWN_SIMULATE:-true}"
+TEARDOWN_MAX_DELETE_COUNT="${TEARDOWN_MAX_DELETE_COUNT:-5}"
+
 # --------------------------------------------------
 # CI fallback for account validation
 # In CI, .env is not available. Use AWS STS to determine 
