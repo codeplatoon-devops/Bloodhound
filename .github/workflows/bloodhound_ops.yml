@@ -79,6 +79,12 @@ jobs:
           role-to-assume: arn:aws:iam::388691194728:role/BloodhoundGitHubInvokeRole
           aws-region: us-west-2
 
+      # Install Terraform for validation workflow
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
 
       # -------------------------------------------------------
       # Invoke Bloodhound Lambda
