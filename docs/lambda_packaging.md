@@ -5,13 +5,27 @@
 - [Why AWS Includes boto3 in Lambda](#why-aws-includes-boto3-in-lambda)
 - [Why boto3 Should Not Be Bundled](#why-boto3-should-not-be-bundled)
 - [Development Dependencies](#development-dependencies)
+- [Build Environment vs Lambda Runtime](#build-environment-vs-lambda-runtime)
+- [Common Packaging Failures](#common-packaging-failures)
 - [Lambda Packaging Flow (Current Implementation)](#lambda-packaging-flow-current-implementation)
 - [Future Packaging Flow (Docker-Based)](#future-packaging-flow-docker-based)
+- [Recommended Build Best Practices](#recommended-build-best-practices)
 
 This document explains how Bloodhound packages dependencies for AWS Lambda
 and why certain libraries should not be bundled with the deployment package.
 
 It also describes future improvements such as Docker-based builds.
+
+Note:
+
+Some Lambda packaging failures may originate from dependency conflicts
+during the pip installation step. Dependency management rules for the
+Bloodhound Lambda environment are documented in:
+
+`docs/lambda_packaging.md`
+
+Engineers encountering dependency resolution errors should review the
+packaging guide before modifying `requirements.txt`.
 
 ---
 
@@ -116,6 +130,86 @@ Terraform packaging only uses `requirements.txt` to ensure that the
 Lambda deployment package contains only the dependencies required
 for runtime execution.
 
+## Build Environment vs Lambda Runtime
+
+Lambda packaging happens in two separate environments.
+
+### Build Environment (Local Machine)
+
+Terraform builds the Lambda package locally using a `local-exec` provisioner.
+
+Example command executed during packaging:
+python3 -m pip install -r requirements.txt -t .build/lambda_pkg
+
+
+The Python version used here is the Python version installed on the engineer's machine.
+
+Example:
+
+
+Local Python: 3.13
+
+
+### Runtime Environment (AWS Lambda)
+
+The Lambda function itself runs inside the runtime defined in Terraform:
+
+`runtime = "python3.10"`
+
+This means AWS executes the code in its own environment:
+
+`AWS Lambda Runtime: Python 3.10`
+
+These environments are independent.
+
+Most of Bloodhound's dependencies are pure Python libraries, so builds created with 
+Python 3.12 or 3.13 usually run correctly in the Python 3.10 Lambda runtime.
+
+However, compiled libraries may fail if built using a different Python version. 
+This is one of the main reasons Docker-based packaging is recommended.
+
+## Common Packaging Failures
+
+Lambda packaging may fail during `terraform apply` if pip cannot resolve dependency conflicts.
+
+Example error:
+`ResolutionImpossible`
+
+A common cause is manually pinning a dependency that is managed by another library.
+
+Example conflict:
+
+`botocore requires urllib3 < 1.27`
+
+If a project pins:
+
+`urllib3==2.x`
+
+pip cannot resolve the dependency tree and the packaging step fails.
+
+Best practice:
+
+Only specify top-level dependencies required by the Lambda function.
+
+Example:
+
+```text
+slack-sdk
+python-dotenv
+```
+
+Avoid pinning dependencies managed by other libraries such as:
+
+```
+botocore
+urllib3
+s3transfer
+```
+
+Allow pip to resolve those automatically.
+
+---
+
 ## Lambda Packaging Flow (Current Implementation)
 
 Terraform only rebuilds the Lambda package when runtime code changes.
@@ -155,7 +249,18 @@ bloodhound_lambda_v2.zip
         ▼
 Lambda deployment
 
-## Future Packaging Flow (Docker-based)
+## Future Packaging Flow (Docker-Based)
+
+Docker-based packaging ensures that Lambda dependencies are built in an environment that matches the Lambda runtime.
+
+This prevents dependency inconsistencies caused by engineers using different local Python versions.
+
+Example Lambda runtime container:
+
+`public.ecr.aws/lambda/python:3.10`
+
+
+```text
 terraform apply
         │
         ▼
@@ -177,3 +282,46 @@ bloodhound_lambda_v2.zip
         ▼
 Lambda deployment
 ```
+
+## Recommended Build Best Practices
+
+Bloodhound currently builds Lambda packages using the developer's local Python environment.
+
+This works because the project dependencies are pure Python.
+
+However, the recommended long-term approach is to package Lambda dependencies inside a Docker container that matches the Lambda runtime.
+
+Benefits:
+
+- deterministic builds
+- consistent dependency resolution
+- matching runtime environment
+- reduced risk of packaging failures
+
+## Quick Troubleshooting
+
+If Terraform fails during Lambda packaging or deployment, consult the
+Terraform troubleshooting guide:
+
+docs/troubleshooting_terraform_lambda.md
+
+That document covers common deployment failures including:
+
+- Lambda runtime import errors
+- Terraform skipping the build step
+- archive_file creation failures
+- empty Lambda deployment packages
+- `.build` directory inconsistencies
+
+Most packaging issues can be diagnosed quickly by inspecting:
+
+`.build/lambda_pkg`
+
+If this directory is missing files or empty, Terraform likely skipped
+the build step or the packaging script failed to run.
+
+The troubleshooting guide provides recovery procedures such as forcing
+Terraform to rebuild the package:
+
+`terraform apply -replace=terraform_data.build_lambda_pkg`
+
