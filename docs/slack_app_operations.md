@@ -9,10 +9,10 @@ Only workspace admins can remove applications.
 
 Current Slack admins typically include:
 
-Chad Thompson-Smith
 Francisco Avila
 Julius Bautista
-Slack App Ownership
+
+## Slack App Ownership
 
 Slack apps should never be owned by a single engineer.
 
