@@ -29,6 +29,8 @@ For deeper engineering documentation:
 - [Slack Slash Commands](#slack-slash-commands-v2)
 - [Validation Scripts](#validation-scripts)
 - [GitHub Automation](#️-github-automation)
+  - [Scheduled Scan Workflow](#scheduled-scan-workflow)
+  - [Manual Operations Workflow](#manual-operations-workflow)
 - [GitHub OIDC Authentication Bootstrap](#github-oidc-authentication-bootstrap)
 - [Bootstrap Script](#bootstrap-script)
 - [Run the bootstrap script](#run-the-bootstrap-script)
@@ -476,18 +478,83 @@ It invokes:
 
 ---
 
+```md
 ## ⚙️ GitHub Automation
 
-Bloodhound includes a GitHub Actions workflow that can:
+Bloodhound includes **two GitHub Actions workflows**:
 
-• run scheduled infrastructure scans  
-• trigger validation workflows  
-• invoke the Bloodhound Lambda scanner  
-• stream Lambda logs directly into CI output  
+1. **Scheduled infrastructure scans**
+2. **Manual operator workflows**
 
-For full details see:
+---
 
-➡ docs/github_actions.md
+## Scheduled Scan Workflow
+
+Workflow file:
+
+`.github/workflows/invoke_lambda.yml`
+
+This workflow runs automatically on a fixed schedule and performs the
+regular Bloodhound infrastructure scan.
+
+Schedule:
+16:00 UTC → 11 AM EST
+04:00 UTC → 11 PM EST
+The workflow:
+
+• authenticates to AWS using GitHub OIDC  
+• invokes the `BloodhoundLambdaV2` Lambda  
+• runs the full scan pipeline  
+• prints the Lambda response and CloudWatch logs  
+
+The Lambda event payload used for scheduled runs is:
+
+```json
+{ "source": "scheduled" }
+```
+This ensures the Lambda pipeline executes in scheduled scan mode.
+ 
+## Manual Operations Workflow
+
+Workflow file:
+`.github/workflows/bloodhound_ops.yml`
+This workflow allows engineers to manually run Bloodhound tasks from the
+GitHub Actions UI.
+
+Available operations:
+
+```text
+| Mode | Description |
+|------|-------------|
+| scan | Run an immediate infrastructure scan |
+| status | Return system health information |
+| validation | Reserved for teardown validation workflow (currently disabled in CI) |
+```
+
+Example usage:
+GitHub → Actions → Bloodhound Operations → Run Workflow
+The workflow will:
+
+• authenticate to AWS using GitHub OIDC
+• invoke BloodhoundLambdaV2
+• print the Lambda response
+• display structured scan results
+• stream recent CloudWatch logs
+ 
+## Validation Workflow Status
+
+The validation workflow is temporarily disabled in GitHub Actions.
+
+The validation pipeline provisions disposable Terraform infrastructure
+and performs controlled teardown tests.
+
+This workflow runs correctly in local environments but requires
+additional CI hardening before being enabled in GitHub Actions.
+
+Validation testing can still be executed locally using:
+`tools/run_validation_workflow.sh`
+---
+
 
 ---
 
@@ -515,11 +582,24 @@ Invoke BloodhoundLambdaV2
 
 ### Bootstrap Script
 
-The repository includes a helper script to configure the required IAM resources.
+The repository includes a helper script that configures the AWS IAM
+resources required for **GitHub Actions OIDC authentication**.
 
 Script:
 
-scripts/bootstrap_github_oidc.sh
+`scripts/bootstrap_github_oidc.sh`
+
+This script prepares the AWS account so GitHub Actions workflows
+can securely invoke the Bloodhound Lambda using OIDC role
+assumption instead of long-lived AWS access keys.
+
+After running the script, GitHub workflows will assume the role:
+
+BloodhoundGitHubInvokeRole
+
+This role allows GitHub Actions to invoke:
+
+BloodhoundLambdaV2
 
 
 This script performs the following tasks:

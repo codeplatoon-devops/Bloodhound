@@ -84,6 +84,74 @@ Slack provides operational visibility and safe control of teardown actions.
 
 ---
 
+## GitHub Automation
+
+Bloodhound includes GitHub Actions workflows that automate
+infrastructure scanning and operational control.
+
+Two workflows are included in the repository:
+
+### Scheduled Scan Workflow
+
+File:
+
+.github/workflows/invoke_lambda.yml
+
+This workflow runs automatically on a fixed schedule and performs
+regular AWS infrastructure scans.
+
+Schedule:
+
+16:00 UTC → 11 AM EST  
+04:00 UTC → 11 PM EST
+
+Authentication and execution flow:
+
+```text
+GitHub Actions
+      ↓
+OIDC Authentication
+      ↓
+AWS STS AssumeRoleWithWebIdentity
+      ↓
+BloodhoundGitHubInvokeRole
+      ↓
+BloodhoundLambdaV2
+      ↓
+AWS Infrastructure Scan + Cleanup
+```
+
+The workflow:
+
+- authenticates to AWS using GitHub OIDC
+- assumes the `BloodhoundGitHubInvokeRole`
+- invokes the `BloodhoundLambdaV2` function
+- prints scan summaries and recent CloudWatch logs
+
+The Lambda event payload used for scheduled scans is:
+
+```json
+{ "source": "scheduled" }
+```
+
+### Manual Operations Workflow
+
+File:
+
+`.github/workflows/bloodhound_ops.yml`
+
+This workflow allows engineers to manually run Bloodhound
+operations from the GitHub Actions UI.
+
+Supported modes:
+- scan — run an immediate infrastructure scan
+- status — return system health information
+- validation — implemented in the workflow but currently disabled in the GitHub Actions UI
+
+Validation mode is currently disabled in CI but remains available
+for local testing.
+
+
 ## Automated Validation Workflow
 
 Bloodhound includes automated validation workflows that verify:
@@ -94,6 +162,13 @@ Bloodhound includes automated validation workflows that verify:
 - controlled deletion behavior
 
 Validation uses disposable test resources to ensure safe testing.
+
+Validation can be executed locally using:
+
+tools/run_validation_workflow.sh
+
+This script orchestrates infrastructure smoke tests and controlled
+teardown validation using disposable AWS resources.
 
 ---
 
@@ -122,4 +197,6 @@ Key components:
 - CloudWatch Logs
 - Slack integration
 - Terraform infrastructure management
+- GitHub Actions automation
+- GitHub OIDC authentication for AWS access
 - validation automation scripts
