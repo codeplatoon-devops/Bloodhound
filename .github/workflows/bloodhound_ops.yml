@@ -49,7 +49,25 @@ on:
         type: choice
         options:
           - scan
-          - validation
+          # -------------------------------------------------------
+          # NOTE:
+          # Validation workflow is temporarily disabled in CI.
+          #
+          # The validation pipeline provisions disposable Terraform
+          # infrastructure and performs controlled teardown tests.
+          #
+          # This workflow currently runs correctly in local
+          # environments but requires additional CI hardening
+          # (Terraform variable injection and account guard handling).
+          #
+          # The implementation remains in this workflow and will be
+          # re-enabled prior to GA once the CI validation pipeline
+          # is fully stabilized.
+          #
+          # To re-enable:
+          #   simply add "validation" back to the options list.
+          # -------------------------------------------------------
+          #- validation
           - status
 
 
