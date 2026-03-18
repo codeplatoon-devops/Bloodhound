@@ -227,31 +227,57 @@ unnecessary Lambda updates.
 terraform apply
         │
         ▼
-local-exec provisioner (build.tf)
+terraform_data.build_lambda_pkg
         │
         ▼
-pip install runtime dependencies
+scripts/build_lambda.sh
+        │
+        ▼
+Prepare build directories
+.build/deps
+.build/src
+.build/lambda_pkg
+        │
+        ▼
+Install runtime dependencies
 (requirements.txt)
         │
         ▼
-copy project source
+Copy application source
 (bloodhound/, handlers/)
         │
         ▼
+Construct Lambda package
 .build/lambda_pkg
         │
         ▼
 archive_file provider
         │
         ▼
-bloodhound_lambda_v2.zip
+.build/bloodhound_lambda_v2.zip
         │
         ▼
 Lambda deployment
+```
 
-## Future Packaging Flow (Docker-Based)
+## Docker-Based Packaging (Optional)
 
-Docker-based packaging ensures that Lambda dependencies are built in an environment that matches the Lambda runtime.
+Bloodhound supports building Lambda dependencies inside a Docker container
+that matches the Lambda runtime environment.
+
+This mode is optional and can be enabled when deterministic builds are required
+or when dependencies include compiled libraries.
+
+Example:
+
+`terraform apply -var="use_docker_build=true"`
+
+Docker builds use the AWS Lambda runtime container:
+
+`public.ecr.aws/lambda/python:3.10`
+
+When Docker mode is enabled, dependency installation runs inside the
+container instead of the engineer's local Python environment.
 
 This prevents dependency inconsistencies caused by engineers using different local Python versions.
 
@@ -297,6 +323,101 @@ Benefits:
 - consistent dependency resolution
 - matching runtime environment
 - reduced risk of packaging failures
+
+## Lambda Build Directory Structure
+
+The Bloodhound Lambda packaging process uses a structured build directory
+to support dependency caching, deterministic builds, and reliable Terraform execution.
+
+Directory layout:
+
+.build/
+  deps/        cached Python dependencies
+  src/         copied application source
+  lambda_pkg/  final Lambda deployment package
+
+deps/
+
+Contains runtime dependencies installed from requirements.txt.
+
+Dependencies are installed into this directory using pip. Because dependency
+installation is typically the slowest part of the Lambda packaging process,
+this directory is cached between builds.
+
+Dependencies are only reinstalled when requirements.txt changes.
+
+This significantly reduces build time when engineers repeatedly run:
+
+terraform apply
+
+src/
+
+Contains the application source copied from:
+
+bloodhound/
+handlers/
+
+Separating the source layer from the dependency layer ensures that source
+code changes do not require reinstalling dependencies.
+
+When application code changes, only this directory is refreshed.
+
+lambda_pkg/
+
+This directory contains the final Lambda deployment package assembled from
+both dependencies and application source.
+
+The Terraform archive_file provider creates the Lambda deployment archive
+from this directory.
+
+Why this structure exists
+
+This layered build design prevents several common Lambda packaging failures.
+
+Prevents repeated dependency installs
+
+Without dependency caching, every Terraform run would reinstall Python
+dependencies. This can add 30–60 seconds to each build.
+
+Caching dependencies allows Terraform to rebuild Lambda packages quickly
+when only source code changes.
+
+Prevents Terraform archive failures
+
+Terraform's archive_file provider cannot create an archive from an empty
+directory.
+
+If the build process deletes the entire .build directory, Terraform may
+attempt to archive a directory that does not yet exist.
+
+By maintaining a stable directory structure and only refreshing specific
+layers, Terraform can reliably evaluate the archive step.
+
+Prevents inconsistent build environments
+
+Separating dependency installation from source copying ensures the final
+deployment package is constructed in a predictable order.
+
+This improves build determinism and makes the packaging process easier
+to debug.
+
+Improves CI reliability
+
+CI pipelines and concurrent Terraform runs are less likely to fail when
+the build directory structure remains stable.
+
+Deleting the entire .build directory can cause race conditions or
+incomplete builds.
+
+By refreshing only the necessary layers, the packaging process becomes
+more robust and reproducible.
+
+This layered build structure provides:
+
+• faster rebuilds  
+• deterministic packaging  
+• safer Terraform execution  
+• reduced dependency installation time
 
 ## Quick Troubleshooting
 

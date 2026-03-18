@@ -604,12 +604,23 @@ Terraform references this directory from the infra folder:
 The correct path must therefore be:
 
 Bloodhound/.build/lambda_pkg
-Best Practice
 
-If build artifacts were cleaned or the repository was freshly cloned, initialize the package directory before running Terraform:
+### Best Practice
+
+If the repository is freshly cloned and Terraform fails during plan
+due to a missing build directory, initialize the structure with:
 
 mkdir -p .build/lambda_pkg
 touch .build/lambda_pkg/.placeholder
+
+This ensures the archive_file provider can evaluate during terraform plan.
+
+During terraform apply, the packaging script will populate the
+directory with the correct contents.
+
+The placeholder file is only required to allow Terraform to evaluate the
+archive step during planning. It is replaced during the build process
+when the packaging script constructs the final Lambda package.
 Additional Improvement (Recommended)
 
 To ensure Terraform automatically rebuilds the Lambda package when source code changes, add a source hash trigger to the build resource.
