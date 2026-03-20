@@ -29,6 +29,40 @@ packaging guide before modifying `requirements.txt`.
 
 ---
 
+## Lambda Execution Routing (Important)
+
+Bloodhound uses explicit event routing in the Lambda entrypoint to ensure
+safe execution across different invocation types.
+
+Execution model:
+
+Event → Router → Handler → Pipeline
+
+### Routing behavior
+
+- Slack HTTP events → handled immediately by Slack handler
+- Scheduled events → routed to `scheduled_handler`
+- Default/manual events → routed to `run()`
+
+### Scheduled execution (critical behavior)
+
+Scheduled events do NOT pass through `run()`.
+
+Instead they follow:
+
+scheduled_handler → run_scheduled_scan() → execute_pipeline()
+
+This separation prevents:
+
+- recursive execution loops
+- duplicate handler invocation
+- unintended re-entry into routing logic
+
+Engineers modifying Lambda execution must ensure scheduled events
+remain isolated from the generic run() path.
+
+---
+
 # Why AWS Includes boto3 in Lambda
 
 AWS Lambda Python runtimes already include the AWS SDK libraries:

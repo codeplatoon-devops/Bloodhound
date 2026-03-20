@@ -61,6 +61,24 @@ infrastructure.
   - teardown actions (terminate/delete)
   - async self-invocation (so slash commands can return immediately)
 
+  ### Execution Model Notes
+
+Bloodhound uses different execution paths depending on invocation type:
+
+- Slack commands may use async self-invocation so responses return immediately
+- Scheduled scans run synchronously through a dedicated execution path
+
+Important:
+
+Scheduled events do NOT use async self-invocation and must not pass through
+the generic `run()` function.
+
+They follow:
+
+scheduled_handler → run_scheduled_scan() → execute_pipeline()
+
+This separation prevents recursive execution loops.
+
 ### Deploy flow
 
 1. Apply Terraform (from `Bloodhound/infra/`):

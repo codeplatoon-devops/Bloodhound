@@ -413,21 +413,42 @@ orchestration entrypoint:
 
 `bloodhound.app.run()`
 
-The `run()` function prepares the runtime environment based on the
-invocation source (Slack command, validation harness, or scheduled run)
-and then executes the core pipeline.
+The `run()` function prepares the runtime environment for non-scheduled
+invocations (Slack commands and validation harnesses) and then executes
+the core pipeline.
+
+Scheduled executions are handled separately via
+`scheduled_handler → run_scheduled_scan()` to prevent recursion.
+
+### ⚠️ Scheduled Execution
+
+Scheduled events do not pass through `run()`.
+
+They are routed to a dedicated execution path:
+
+scheduled_handler → run_scheduled_scan() → execute_pipeline()
+
+This prevents recursive execution and ensures deterministic behavior.
 
 Execution flow:
 
+```text
 Lambda handler
    ↓
-bloodhound.app.run()
-   ↓
 event routing (Slack / validation / scheduled)
+   ↓
+
+Scheduled:
+   scheduled_handler → run_scheduled_scan()
+
+Default / Slack / validation:
+   bloodhound.app.run()
+
    ↓
 execute_pipeline()
    ↓
 scan → budget → teardown → reporting
+```
 
 
 ### Configure Lambda environment variables
