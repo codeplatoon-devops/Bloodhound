@@ -165,6 +165,23 @@ This prevents accidental enabling of destructive mode.
 
 # Bloodhound Safety Architecture
 
+## Execution Path Safety (Important)
+
+Bloodhound separates execution paths based on invocation type to ensure
+safe and deterministic behavior.
+
+- Slack commands may use async self-invocation to return immediately
+- Scheduled executions run synchronously through a dedicated path
+
+Scheduled events do NOT pass through the generic `run()` function.
+
+They follow:
+
+scheduled_handler → run_scheduled_scan() → execute_pipeline()
+
+This separation prevents recursive execution and ensures that scheduled
+runs cannot re-enter the Lambda routing layer.
+
 Bloodhound includes multiple independent safety mechanisms designed to prevent accidental infrastructure deletion.
 
 These controls operate at different layers of the system.

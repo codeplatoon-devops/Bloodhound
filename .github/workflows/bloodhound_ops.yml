@@ -11,7 +11,12 @@ run-name: Bloodhound Operations — ${{ github.event.inputs.mode }}
 #   scan        → run infrastructure scan immediately
 #   validation  → check configuration
 #   status      → quick system health check
+#   validate_scheduler  → simulate scheduled EventBridge execution (debug only)
 #
+# NOTE:
+# validate_scheduler is a controlled validation mode used to
+# test the scheduled Lambda execution path without relying
+# on cron or EventBridge triggers.
 # ------------------------------------------------------------
 
 permissions:
@@ -69,6 +74,22 @@ on:
           # -------------------------------------------------------
           #- validation
           - status
+          # -------------------------------------------------------
+          # Scheduler Validation Mode
+          #
+          # validate_scheduler simulates an EventBridge scheduled
+          # invocation using:
+          #   { "source": "scheduled" }
+          #
+          # This is used to validate the scheduled execution path
+          # before changes are promoted to main.
+          #
+          # This is NOT the production scheduler.
+          #
+          # The real scheduler is defined in:
+          #   invoke_lambda.yml
+          # -------------------------------------------------------
+          - validate_scheduler
 
 
 jobs:
@@ -167,9 +188,16 @@ jobs:
 
 
             # -------------------------------------------------------
-            # Standard Lambda operations (scan / status)
+            # Standard Lambda operations (scan / status) + scheduler validation
             # -------------------------------------------------------
-            echo "{\"source\":\"$MODE\"}" > event.json
+            # validate_scheduler simulates EventBridge scheduled trigger
+            if [ "$MODE" = "validate_scheduler" ]; then
+              echo "===== VALIDATING SCHEDULER PATH ====="
+              echo "Simulating EventBridge scheduled event"
+              echo '{"source":"scheduled"}' > event.json
+            else
+              echo "{\"source\":\"$MODE\"}" > event.json
+            fi
 
             # show payload being sent to Lambda
             cat event.json
