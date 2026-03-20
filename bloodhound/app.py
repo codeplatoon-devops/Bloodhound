@@ -41,7 +41,7 @@ from bloodhound.whitelist import filter_whitelisted
 from bloodhound.types import resource_key
 from bloodhound.handlers.slack_handler import handle_slack_event
 from bloodhound.handlers.validation_handler import handle_validation_event
-from bloodhound.handlers.scheduled_handler import handle_scheduled_event
+#from bloodhound.handlers.scheduled_handler import handle_scheduled_event
 from bloodhound.services.status_service import handle_status_command
 from bloodhound.services.scan_service import scan_resources
 from bloodhound.services.budget_service import compute_budget
@@ -220,6 +220,21 @@ def execute_pipeline(event):
     return result
 
 
+def run_scheduled_scan():
+    """
+    Entry point for scheduled executions.
+
+    This bypasses the generic run() router and directly
+    executes the Bloodhound pipeline with a controlled event.
+
+    This prevents recursive re-entry into scheduled handlers.
+    """
+
+    event = {"source": "scheduled"}
+
+    return execute_pipeline(event)
+
+
 def run(event, context):
     """
     Main orchestration entrypoint for Lambda and local testing.
@@ -251,9 +266,7 @@ def run(event, context):
 
     elif source == "validation":
         handle_validation_event(event)
-
-    elif source == "scheduled":
-        handle_scheduled_event(event)
+        
 
     # ------------------------------------------------------------
     # Execute the core Bloodhound pipeline

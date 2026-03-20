@@ -31,10 +31,10 @@ def handle_scheduled_event(event, context=None):
     print("Event payload:", event)
 
     # Import here to avoid circular imports
-    from bloodhound.app import run
+    from bloodhound.app import run_scheduled_scan
 
-    # Execute main Bloodhound runtime
-    result = run(event, context)
+    # Execute scheduled scan directly (no generic run path)
+    result = run_scheduled_scan()
 
     return {
         "status": "scheduled_scan_executed",

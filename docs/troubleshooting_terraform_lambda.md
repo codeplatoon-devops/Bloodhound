@@ -3,6 +3,7 @@
 ## Table of Contents
 
 - [Lambda Runtime Import Errors](#issue-lambda-runtime-import-errors)
+- [pip Dependency Resolution Failure During Lambda Packaging](#issue-pip-dependency-resolution-failure-during-lambda-packaging)
 - [Cause](#cause)
 - [Diagnosis](#diagnosis)
 - [Fix](#fix)
@@ -409,6 +410,152 @@ requests/
 boto3/
 ...
 
+# Issue: pip Dependency Resolution Failure During Lambda Packaging
+
+Example error during `terraform apply`:
+
+```text
+ERROR: Cannot install -r requirements.txt because these package versions have conflicting dependencies.
+The conflict is caused by:
+botocore 1.34.x depends on urllib3<1.27
+The user requested urllib3==2.0.7
+
+ERROR: ResolutionImpossible
+```
+
+
+This error occurs during the Lambda packaging step when Terraform runs:
+
+
+pip install -r requirements.txt -t .build/lambda_pkg
+
+
+The pip dependency resolver is unable to construct a valid dependency tree.
+
+---
+
+# Cause
+
+A **transitive dependency** was manually pinned in `requirements.txt`.
+
+Example problematic configuration:
+
+
+boto3==1.34.x
+botocore==1.34.x
+urllib3==2.0.7
+
+
+The AWS SDK dependency chain looks like this:
+
+
+boto3
+└── botocore
+└── urllib3 (<1.27)
+
+
+Because `urllib3` was forced to version `2.x`, pip could not satisfy
+botocore's requirement.
+
+This caused the dependency resolver to fail before the Lambda package
+could be built.
+
+---
+
+# Diagnosis
+
+If Terraform fails during the packaging step, inspect the output for pip
+dependency resolution errors.
+
+Typical indicators include:
+
+
+ResolutionImpossible
+
+
+or
+
+
+conflicting dependencies
+
+
+To reproduce locally, run:
+
+
+pip install -r requirements.txt
+
+
+If pip fails locally, Terraform will also fail during Lambda packaging.
+
+---
+
+# Fix
+
+Remove the manually pinned transitive dependency.
+
+Example corrected configuration:
+
+
+slack-sdk==3.26.1
+python-dotenv==1.0.0
+
+
+Do **not manually pin** dependencies managed by other libraries.
+
+Allow pip to resolve the dependency tree automatically.
+
+---
+
+# Best Practice
+
+Only specify **top-level dependencies** required by the Lambda function.
+
+Avoid pinning dependencies managed internally by other libraries.
+
+Examples that should generally **not be pinned**:
+
+
+botocore
+urllib3
+s3transfer
+jmespath
+
+
+These dependencies are automatically managed by the AWS SDK.
+
+Additionally, AWS Lambda already provides the following libraries in the runtime:
+
+
+boto3
+botocore
+
+
+Because of this, they usually **do not need to be included in `requirements.txt`.**
+
+Refer to:
+
+
+docs/lambda_packaging.md
+
+
+for the dependency strategy used by the Bloodhound Lambda deployment.
+
+---
+
+# When This Problem Commonly Appears
+
+This issue most often occurs when:
+
+• adding new dependencies to `requirements.txt`  
+• copying dependency lists from other projects  
+• manually upgrading libraries without reviewing transitive dependencies  
+• pinning versions to resolve security scanner warnings
+
+Always verify dependency compatibility before committing changes to
+`requirements.txt`.
+
+---
+
 ## Issue: .build Directory Behaving Inconsistently
 
 Rarely, the .build directory may appear to ignore newly created files.
@@ -457,12 +604,23 @@ Terraform references this directory from the infra folder:
 The correct path must therefore be:
 
 Bloodhound/.build/lambda_pkg
-Best Practice
 
-If build artifacts were cleaned or the repository was freshly cloned, initialize the package directory before running Terraform:
+### Best Practice
+
+If the repository is freshly cloned and Terraform fails during plan
+due to a missing build directory, initialize the structure with:
 
 mkdir -p .build/lambda_pkg
 touch .build/lambda_pkg/.placeholder
+
+This ensures the archive_file provider can evaluate during terraform plan.
+
+During terraform apply, the packaging script will populate the
+directory with the correct contents.
+
+The placeholder file is only required to allow Terraform to evaluate the
+archive step during planning. It is replaced during the build process
+when the packaging script constructs the final Lambda package.
 Additional Improvement (Recommended)
 
 To ensure Terraform automatically rebuilds the Lambda package when source code changes, add a source hash trigger to the build resource.

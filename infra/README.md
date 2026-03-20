@@ -15,7 +15,7 @@
 
 This directory provisions the AWS infrastructure for running Bloodhound v2 with Slack slash commands.
 
-We use a **Lambda Function URL** (single endpoint) for `/seek` and `/seek_destroy`.
+We use a **Lambda Function URL** (single endpoint) for `/v2_seek` and `/v2_seek_destroy`.
 
 ## First-Time Terraform Setup
 
@@ -61,6 +61,24 @@ infrastructure.
   - teardown actions (terminate/delete)
   - async self-invocation (so slash commands can return immediately)
 
+  ### Execution Model Notes
+
+Bloodhound uses different execution paths depending on invocation type:
+
+- Slack commands may use async self-invocation so responses return immediately
+- Scheduled scans run synchronously through a dedicated execution path
+
+Important:
+
+Scheduled events do NOT use async self-invocation and must not pass through
+the generic `run()` function.
+
+They follow:
+
+scheduled_handler → run_scheduled_scan() → execute_pipeline()
+
+This separation prevents recursive execution loops.
+
 ### Deploy flow
 
 1. Apply Terraform (from `Bloodhound/infra/`):
@@ -70,17 +88,65 @@ terraform init
 terraform apply
 ```
 
-Terraform automatically prepares `../.build/lambda_pkg/` (dependencies + source) and builds `../.build/bloodhound_lambda_v2.zip` during `terraform apply`.
+Terraform automatically builds the Lambda deployment package during `terraform apply`.
 
-The build process is triggered when Terraform detects changes to the Lambda source code or dependency files.
+Packaging flow:
 
-This ensures the Lambda package is rebuilt only when the application code changes.
+```text
+terraform apply
+      ↓
+terraform_data.build_lambda_pkg
+      ↓
+scripts/build_lambda.sh
+      ↓
+.build/
+   deps/        cached Python dependencies
+   src/         copied application source
+   lambda_pkg/  final Lambda package
+      ↓
+archive_file
+      ↓
+.build/bloodhound_lambda_v2.zip
+```
+
+The build process is triggered only when Terraform detects changes to:
+
+- application source code (bloodhound/, handlers/)
+- requirements.txt
+
+This ensures fast incremental builds while avoiding unnecessary dependency installation.
+
+⚠️ Important
+
+Engineers modifying the Lambda build process should review:
+
+docs/lambda_packaging.md
+
+before making changes to avoid breaking Terraform packaging or deployment.
 
 2. Configure Slack slash commands
 
-In your Slack App settings, set the Request URL for `/seek` and `/seek_destroy` to the Terraform output:
+In your Slack App settings, set the Request URL for `v2_seek` and `/v2_seek_destroy` to the Terraform output:
 
 - `lambda_function_url`
+
+### Lambda Build System Overview
+
+Bloodhound uses a layered build system to improve performance and reliability.
+
+```text
+.build/
+  deps/        cached dependencies
+  src/         application source
+  lambda_pkg/  final deployment package
+```
+
+This structure provides:
+
+- faster rebuilds (dependencies are cached)
+- deterministic builds (optional Docker support)
+- safer Terraform execution (prevents empty archive errors)
+- improved CI reliability
 
 ## Python Version Requirement for Lambda Packaging
 
@@ -90,7 +156,24 @@ The Lambda runtime for Bloodhound v2 is currently:
 
 During deployment, Terraform builds the Lambda package locally using pip before uploading it to AWS.
 
-This step is executed by Terraform using:
+
+Dependency installation is handled by the build script:
+
+scripts/build_lambda.sh
+
+By default, dependencies are installed using the local Python environment.
+
+Optionally, Docker can be used to ensure compatibility with the Lambda runtime:
+
+terraform apply -var="use_docker_build=true"
+
+Docker builds use the AWS Lambda runtime container:
+
+public.ecr.aws/lambda/python:3.10
+
+This ensures dependencies are built in an environment that matches AWS Lambda.
+
+Legacy step was executed by Terraform using:
 
 `python3 -m pip install -r requirements.txt -t .build/lambda_pkg`
 
@@ -120,8 +203,12 @@ Your local development environment can still use newer Python versions (3.11+), 
 Note: 
 The Lambda runtime version is defined in lambda.tf. If the runtime is upgraded (for example to python3.11 or python3.12), the packaging Python version used in build.tf should be updated to match.
 
-See `docs/lambda_packaging.md` for details about dependency management
-and Docker-based packaging for Lambda.
+See `docs/lambda_packaging.md` for full details on:
+
+- Lambda packaging architecture
+- dependency caching strategy
+- Docker-based builds
+- Terraform build triggers
 
 ### AWS Region Alignment
 
@@ -153,7 +240,9 @@ If the regions do not match, the workflow will fail because AWS will not find th
 
 ### Notes
 
-- Terraform runs `python3 -m pip install ...` locally to build the zip, so you need `python3`, `pip`, `zip`, and `rsync` installed.
+- Terraform invokes a build script (`scripts/build_lambda.sh`) to construct the Lambda package.
+- The build script requires `python3`, `pip`, `zip`, and `rsync` when using local builds.
+- If Docker mode is enabled, only Docker is required for dependency installation.
 - Putting secrets in `var.lambda_env` stores them in Terraform state. Prefer setting secrets in the Lambda console (or a secrets manager).
 
 ## Environment Variables and Secrets

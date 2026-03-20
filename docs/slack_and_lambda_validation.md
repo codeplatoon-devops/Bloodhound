@@ -120,6 +120,29 @@ This message indicates that Slack successfully invoked the Lambda handler and th
 
 ## What You Should Look For in Logs
 
+### Important: Recursion Prevention
+
+Scheduled execution is isolated from the generic `run()` function to
+prevent recursive Lambda invocation.
+
+Correct behavior:
+
+- Each invocation logs:
+  - "Bloodhound pipeline started"
+  - "Bloodhound pipeline completed"
+- Each invocation runs exactly once
+
+Incorrect behavior (indicates a bug):
+
+- Repeated "Scheduled Bloodhound scan triggered"
+- Multiple identical executions from a single event
+- RecursionError or timeout
+
+If recursion is observed, review Lambda routing and ensure scheduled
+events are handled through:
+
+scheduled_handler → run_scheduled_scan() → execute_pipeline()
+
 You are confirming these signals:
 
 - A new log stream appears right after you run `/v2_seek`
@@ -198,7 +221,71 @@ This validation is complete when:
 - `/v2_seek` produces the expected Slack output (scan summary, budget summary, teardown plan)
 - `/v2_seek_destroy` enforces its confirmation and allowlist protections
 - CloudWatch logs show a corresponding invocation and execution path
+- Direct CLI invocation returns a valid pipeline response (`ok: true`)
+- No recursive execution or repeated scheduled triggers occur
 - No destructive actions occur during validation (dry-run / simulate mode only)
+
+## Direct Lambda CLI Validation (Recommended)
+
+In addition to Slack-based validation, you should verify Lambda execution
+directly using the AWS CLI. This confirms the core pipeline works
+independently of Slack, EventBridge, or GitHub Actions.
+
+### Step 1 — Invoke Lambda directly
+
+Run:
+
+aws lambda invoke \
+--function-name BloodhoundLambdaV2 \
+--region us-west-2 \
+--payload '{"source":"scan"}' \
+--cli-binary-format raw-in-base64-out \
+out.json
+
+If successful, you will see:
+
+{
+  "StatusCode": 200,
+  "ExecutedVersion": "$LATEST"
+}
+
+---
+
+### Step 2 — Inspect output
+
+Run:
+
+cat out.json
+
+Expected result:
+
+{
+  "ok": true,
+  ...
+}
+
+---
+
+### Step 3 — Verify logs
+
+Check CloudWatch logs and confirm:
+
+- "Bloodhound pipeline started"
+- "Bloodhound pipeline completed"
+- Only ONE execution occurs
+- No recursion or repeated scheduled triggers
+
+---
+
+### Why this matters
+
+This test isolates Lambda execution and confirms:
+
+- routing logic is correct
+- recursion issues are resolved
+- pipeline executes deterministically
+
+This should always be performed after major routing or handler changes.
 
 ## Validating `/v2_seek_destroy` Safety Controls
 

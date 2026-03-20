@@ -24,7 +24,13 @@ Bloodhound v2 is already deployed as a **new** Lambda (`BloodhoundLambdaV2`) so 
 
 ### Invocation paths
 
-- **Scheduled**: GitHub Actions can invoke `BloodhoundLambdaV2` on a cadence.
+- **Scheduled**: GitHub Actions invokes `BloodhoundLambdaV2`, which routes
+  through a dedicated scheduled handler and executes:
+
+  scheduled_handler → run_scheduled_scan() → execute_pipeline()
+
+  Scheduled executions do NOT pass through the generic `run()` function
+  to prevent recursive execution.
 - **On-demand**: Slack slash commands (`/v2_seek`, `/v2_seek_destroy_plan`, `/v2_seek_destroy CONFIRM`, `/v2_status`) hit a **Lambda Function URL**.
 
 ### What it scans (per region)
@@ -43,6 +49,40 @@ Bloodhound v2 is already deployed as a **new** Lambda (`BloodhoundLambdaV2`) so 
 - **Budget summary** (7-month cohort, dynamic monthly allowance)
 - **Teardown plan** (always produced)
 - **Teardown results** (only when apply-mode executes)
+
+### Direct validation (CLI)
+
+The Lambda can be invoked directly using the AWS CLI to validate core
+pipeline behavior without Slack or GitHub Actions.
+
+Example:
+```bash
+aws lambda invoke \
+--function-name BloodhoundLambdaV2 \
+--region us-west-2 \
+--payload '{"source":"scan"}' \
+--cli-binary-format raw-in-base64-out \
+out.json
+```
+
+Then:
+
+`cat out.json`
+
+Expected result:
+
+```json
+{
+  "ok": true,
+  ...
+}
+```
+
+This confirms:
+
+- routing logic is correct
+- recursion issues are resolved
+- pipeline executes successfully
 
 ### Teardown safety rails (v2)
 
@@ -187,6 +227,23 @@ This is the canonical list; `env.example` should be treated as the “source of 
 ---
 
 ## 3) Target architecture (what’s implemented)
+
+### Execution Routing Model
+
+Bloodhound uses explicit event routing in the Lambda entrypoint.
+
+Event → Router → Handler → Execution Function
+
+Key rule:
+
+- Scheduled events must not pass through the generic `run()` function
+- Slack and validation events may use different execution paths
+
+This prevents:
+
+- recursive execution loops
+- unintended handler re-entry
+- ambiguous control flow
 
 ### Code structure (current)
 

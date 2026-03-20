@@ -2,6 +2,9 @@
 
 ## 📌 Quick Overview
 
+Engineers working on Lambda packaging or Terraform deployment should
+review `docs/lambda_packaging.md` before modifying the build pipeline.
+
 New to the project?
 
 Start here:
@@ -42,16 +45,37 @@ Bloodhound v2 scans selected AWS regions for common cost-leak resources, posts r
 
 - Clone this repo
 - Configure `.env` for local testing
-- Rebuild the deployment zip locally (the `.build/` dir is not committed)
+- Terraform automatically builds the Lambda deployment zip locally (the `.build/` directory is not committed)
 - Configure Lambda env vars to match your `.env`
 
 If you need to create a Slack bot from scratch, see `docs/SLACK_SETUP.md`.
 
-Project docs:
+### Project docs:
 
 - v2 plan: `docs/bloodhound_v2_plan.md`
+- Lambda packaging and dependency strategy: `docs/lambda_packaging.md`
+- Terraform troubleshooting: `docs/troubleshooting_terraform_lambda.md`
 
 ![AWS Architecture Diagram (v2)](assets/bloodhound_lambda_architecture_v2.svg)
+
+### Lambda Packaging Pipeline
+
+Bloodhound builds the Lambda deployment package locally using Terraform.
+
+The packaging system separates dependency installation from application
+source copying to ensure fast incremental builds and deterministic packaging.
+
+```text
+terraform apply
+      ↓
+build_lambda_pkg (Terraform build trigger)
+      ↓
+scripts/build_lambda.sh
+      ↓
+.build directory layers
+      ↓
+Lambda deployment archive
+```
 
 ## ⚠️ Safety Notice — Read Before Running Bloodhound
 
@@ -137,7 +161,8 @@ AWS Lambda already provides several AWS SDK libraries in the runtime
 environment (including boto3 and botocore). Because of this, these libraries
 are not bundled into the Lambda deployment package.
 
-For a detailed explanation of the packaging strategy, see:
+For a detailed explanation of the Lambda packaging architecture,
+dependency rules, and build pipeline, see:
 
 `docs/lambda_packaging.md`
 
@@ -339,7 +364,39 @@ misconfigured environment variables or commits.
 
 ## Build the Lambda deployment zip (v2)
 
-The `.build/` directory is intentionally not committed. Terraform will build the zip automatically (see `infra/README.md`).
+The `.build/` directory is intentionally not committed to the repository.
+
+Terraform automatically constructs the Lambda deployment package during
+`terraform apply`.
+
+Packaging flow:
+
+```text
+terraform apply
+      ↓
+terraform_data.build_lambda_pkg
+      ↓
+scripts/build_lambda.sh
+      ↓
+.build/
+   deps/        cached Python dependencies
+   src/         copied application source
+   lambda_pkg/  final Lambda package
+      ↓
+archive_file
+      ↓
+.build/bloodhound_lambda_v2.zip
+      ↓
+Lambda deployment
+```
+
+This layered build system allows Terraform to rebuild the Lambda package
+quickly when application code changes while avoiding unnecessary dependency
+reinstallation.
+
+For a deeper explanation of the packaging architecture see:
+
+`docs/lambda_packaging.md`
 
 ---
 
@@ -356,21 +413,42 @@ orchestration entrypoint:
 
 `bloodhound.app.run()`
 
-The `run()` function prepares the runtime environment based on the
-invocation source (Slack command, validation harness, or scheduled run)
-and then executes the core pipeline.
+The `run()` function prepares the runtime environment for non-scheduled
+invocations (Slack commands and validation harnesses) and then executes
+the core pipeline.
+
+Scheduled executions are handled separately via
+`scheduled_handler → run_scheduled_scan()` to prevent recursion.
+
+### ⚠️ Scheduled Execution
+
+Scheduled events do not pass through `run()`.
+
+They are routed to a dedicated execution path:
+
+scheduled_handler → run_scheduled_scan() → execute_pipeline()
+
+This prevents recursive execution and ensures deterministic behavior.
 
 Execution flow:
 
+```text
 Lambda handler
    ↓
-bloodhound.app.run()
-   ↓
 event routing (Slack / validation / scheduled)
+   ↓
+
+Scheduled:
+   scheduled_handler → run_scheduled_scan()
+
+Default / Slack / validation:
+   bloodhound.app.run()
+
    ↓
 execute_pipeline()
    ↓
 scan → budget → teardown → reporting
+```
 
 
 ### Configure Lambda environment variables
