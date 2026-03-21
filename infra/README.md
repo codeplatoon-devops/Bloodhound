@@ -1,4 +1,4 @@
-## Bloodhound v2 Infrastructure (Terraform)
+# Bloodhound v2 Infrastructure (Terraform)
 
 ## Table of Contents
 
@@ -35,11 +35,9 @@ cd infra
 
 The script will:
 
-detect existing IAM role bloodhound-v2-role
-
-detect existing IAM policy bloodhound-v2-policy
-
-import them into Terraform state if necessary
+- detect existing IAM role `bloodhound-v2-role`
+- detect existing IAM policy `bloodhound-v2-policy`
+- import them into Terraform state if necessary
 
 After running the bootstrap script, proceed with deployment:
 
@@ -65,19 +63,44 @@ infrastructure.
 
 Bloodhound uses different execution paths depending on invocation type:
 
+All events first pass through the Lambda event router, which determines
+the correct execution path.
+
 - Slack commands may use async self-invocation so responses return immediately
 - Scheduled scans run synchronously through a dedicated execution path
+- Manual operations execute through the main pipeline
 
 Important:
 
 Scheduled events do NOT use async self-invocation and must not pass through
 the generic `run()` function.
 
+They are routed through a dedicated scheduled execution handler.
+
 They follow:
 
 scheduled_handler → run_scheduled_scan() → execute_pipeline()
 
 This separation prevents recursive execution loops.
+
+### Lambda Execution Logging
+
+Bloodhound Lambda executions emit structured log markers to make
+CloudWatch debugging easier.
+
+Format:
+
+[BLOODHOUND][EVENT_TYPE][request_id=...]
+
+Examples:
+
+[BLOODHOUND][SLACK][request_id=...]
+[BLOODHOUND][SCHEDULED][request_id=...]
+[BLOODHOUND][VALIDATION][request_id=...]
+
+The `request_id` corresponds to the AWS Lambda invocation ID
+(`context.aws_request_id`) and allows engineers to trace
+individual executions across CloudWatch logs.
 
 ### Deploy flow
 
@@ -116,7 +139,7 @@ The build process is triggered only when Terraform detects changes to:
 
 This ensures fast incremental builds while avoiding unnecessary dependency installation.
 
-⚠️ Important
+### ⚠️ Important
 
 Engineers modifying the Lambda build process should review:
 
@@ -159,7 +182,7 @@ During deployment, Terraform builds the Lambda package locally using pip before 
 
 Dependency installation is handled by the build script:
 
-scripts/build_lambda.sh
+`scripts/build_lambda.sh`
 
 By default, dependencies are installed using the local Python environment.
 
@@ -541,7 +564,7 @@ If the Lambda environment variable:
 APPLY_CHANGES=true
 
 Terraform will refuse to deploy unless the engineer explicitly
-acknowledges the action.
+acknowledges the action using the override variable.
 
 This guard prevents accidental deployments where Bloodhound
 would be allowed to delete infrastructure.

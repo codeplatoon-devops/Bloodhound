@@ -1,3 +1,5 @@
+# Slack App Operations (Bloodhound V2)
+
 Slack Workspace
 Workspace: CodePlatoon
 
@@ -5,20 +7,22 @@ Admin console:
 
 https://codeplatoon.slack.com/apps/manage
 
-Only workspace admins can remove applications.
+Only Slack workspace administrators can install or remove applications.
 
 Current Slack admins typically include:
 
-Francisco Avila
-Julius Bautista
+- Francisco A.
+- Julius B.
+- Mike M.
 
 ## Slack App Ownership
 
 Slack apps should never be owned by a single engineer.
 
-To prevent orphaned integrations, add collaborators.
+To prevent orphaned integrations and loss of access, Slack app
+ownership must be shared with multiple workspace administrators.
 
-Open:
+Open the Slack developer console:
 
 https://api.slack.com/apps
 
@@ -34,4 +38,3 @@ Add:
 
 Julius Bautista
 Francisco Avila
-Chad Thompson-Smith

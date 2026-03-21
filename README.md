@@ -15,6 +15,22 @@ For deeper engineering documentation:
 
 📚 [docs/](docs/)
 
+## Architecture Summary
+
+Bloodhound uses a single Lambda entrypoint with deterministic
+event routing to support multiple execution paths:
+
+Slack commands → Slack handler  
+Scheduled events → scheduled handler  
+Validation events → validation handler  
+Manual operations → main pipeline
+
+All executions emit structured CloudWatch logs:
+
+[BLOODHOUND][EVENT_TYPE][request_id=...]
+
+This allows every invocation to be traced end-to-end.
+
 ## Table of Contents
 
 - [Stop — Read This Before Running Bloodhound](#️-stop--read-this-before-running-bloodhound)
@@ -306,7 +322,7 @@ TEARDOWN_MAX_DELETE_COUNT
 
 Default value:
 
-10
+5
 
 If a teardown plan contains more resources than this limit,
 Bloodhound will abort execution and refuse to delete anything.
@@ -331,31 +347,24 @@ Bloodhound includes several runtime safeguards:
 - **only delete explicit IDs/ARNs**: set `TEARDOWN_TARGET_IDS=...`
 - **delete everything not whitelisted**: `TEARDOWN_ALLOW_ALL=true`
 
-
 ### Infrastructure safety guard
 
 Terraform includes an additional **deployment safety guard**.
 
 If the environment variable contains:
 
-
 APPLY_CHANGES=true
-
 
 Terraform will **block the deployment** unless the engineer
 explicitly confirms destructive mode.
 
 Example error:
 
-
 Deployment blocked: APPLY_CHANGES=true requires -var allow_apply_mode=true
-
 
 To intentionally deploy Bloodhound with destructive mode enabled:
 
-
 terraform apply -var allow_apply_mode=true
-
 
 This prevents accidental infrastructure deletion caused by
 misconfigured environment variables or commits.
@@ -556,7 +565,6 @@ It invokes:
 
 ---
 
-```md
 ## ⚙️ GitHub Automation
 
 Bloodhound includes **two GitHub Actions workflows**:
@@ -580,10 +588,10 @@ Schedule:
 04:00 UTC → 11 PM EST
 The workflow:
 
-• authenticates to AWS using GitHub OIDC  
-• invokes the `BloodhoundLambdaV2` Lambda  
-• runs the full scan pipeline  
-• prints the Lambda response and CloudWatch logs  
+- authenticates to AWS using GitHub OIDC  
+- invokes the `BloodhoundLambdaV2` Lambda  
+- runs the full scan pipeline  
+- prints the Lambda response and CloudWatch logs  
 
 The Lambda event payload used for scheduled runs is:
 
@@ -606,6 +614,7 @@ Available operations:
 |------|-------------|
 | scan | Run an immediate infrastructure scan |
 | status | Return system health information |
+| validate_scheduler | Simulate an EventBridge scheduled invocation for validation |
 | validation | Reserved for teardown validation workflow (currently disabled in CI) |
 ```
 
@@ -613,11 +622,11 @@ Example usage:
 GitHub → Actions → Bloodhound Operations → Run Workflow
 The workflow will:
 
-• authenticate to AWS using GitHub OIDC
-• invoke BloodhoundLambdaV2
-• print the Lambda response
-• display structured scan results
-• stream recent CloudWatch logs
+- authenticate to AWS using GitHub OIDC
+- invoke BloodhoundLambdaV2
+- print the Lambda response
+- display structured scan results
+- stream recent CloudWatch logs
  
 ## Validation Workflow Status
 
@@ -631,10 +640,31 @@ additional CI hardening before being enabled in GitHub Actions.
 
 Validation testing can still be executed locally using:
 `tools/run_validation_workflow.sh`
----
-
 
 ---
+
+## Lambda Logging and Request Tracing
+
+Bloodhound uses standardized CloudWatch log markers to make
+Lambda execution paths easy to identify during debugging.
+
+Each invocation emits a structured log header:
+
+[BLOODHOUND][EVENT_TYPE][request_id=...]
+
+Examples:
+
+[BLOODHOUND][SCHEDULED][request_id=abc123]
+[BLOODHOUND][SCAN][request_id=xyz456]
+[BLOODHOUND][STATUS][request_id=def789]
+
+This logging format provides:
+
+- clear identification of invocation type
+- request-level traceability
+- easier debugging of scheduled and manual executions
+
+--- 
 
 ### GitHub OIDC Authentication Bootstrap
 
@@ -646,6 +676,7 @@ Instead, GitHub obtains **temporary AWS credentials** during workflow execution.
 
 Authentication flow:
 
+```text
 GitHub Actions
 ↓
 OIDC identity token
@@ -657,6 +688,7 @@ BloodhoundGitHubInvokeRole
 Temporary AWS credentials
 ↓
 Invoke BloodhoundLambdaV2
+```
 
 ### Bootstrap Script
 
@@ -678,7 +710,6 @@ BloodhoundGitHubInvokeRole
 This role allows GitHub Actions to invoke:
 
 BloodhoundLambdaV2
-
 
 This script performs the following tasks:
 
@@ -722,17 +753,16 @@ If they appear locally (for example if the script is interrupted), they can safe
 
 Run once when setting up CI access for a new AWS account.
 
+```bash
 chmod +x scripts/bootstrap_github_oidc.sh
 ./scripts/bootstrap_github_oidc.sh
-
+```
 
 The script will output the IAM role ARN used by the GitHub workflow.
 
 Example:
 
-
 arn:aws:iam::<ACCOUNT_ID>:role/BloodhoundGitHubInvokeRole
-
 
 ---
 
@@ -741,9 +771,7 @@ arn:aws:iam::<ACCOUNT_ID>:role/BloodhoundGitHubInvokeRole
 The IAM role restricts access to workflows originating from the
 official repository:
 
-
-repo:codeplatoon-devops/Bloodhound:*
-
+`repo:codeplatoon-devops/Bloodhound:*`
 
 This allows engineers to run workflows from **any branch** within the
 repository, enabling CI testing for feature branches while still
@@ -785,7 +813,7 @@ verify the infrastructure deployment and teardown pipeline.
 
 These scripts are located in:
 
-tools/
+`tools/`
 
 ### Validation Workflow
 
@@ -794,7 +822,9 @@ available validation tools in the correct order.
 
 Run:
 
+```bash
 tools/run_validation_workflow.sh
+```
 
 This script orchestrates the following validation stages:
 
@@ -820,7 +850,9 @@ tools/run_validation_workflow.sh
 
 Script:
 
+```bash
 tools/smoke_test_lambda.sh
+```
 
 This script performs a quick health check of the deployed Lambda.
 
@@ -844,11 +876,13 @@ It detects most deployment problems within seconds.
 
 Script:
 
+```bash
 tools/validate_teardown.sh
+```
 
 This script automates the teardown validation procedure described in:
 
-docs/validate_teardown.md
+`docs/validate_teardown.md`
 
 The script:
 
@@ -894,9 +928,11 @@ Optional Log Streaming
 
 During validation, Lambda execution logs can be streamed live using:
 
+```bash
 aws logs tail /aws/lambda/BloodhoundLambdaV2 \
 --region us-west-2 \
 --follow
+```
 
 This allows engineers to observe the execution path of:
 
