@@ -201,6 +201,52 @@ Key components:
 - validation automation scripts
 - deterministic Lambda event routing
 
+## Deterministic Lambda Build Pipeline
+
+Bloodhound uses a deterministic Docker-based build pipeline to
+construct the Lambda deployment artifact.
+
+Instead of building dependencies directly on the host machine,
+Terraform invokes a build script that performs the packaging
+inside a Docker container that mirrors the AWS Lambda runtime.
+
+Build process:
+
+1. Terraform triggers the Lambda build script
+2. The script launches the AWS SAM build container
+3. Python dependencies are installed from `requirements.txt`
+4. Bloodhound application source code is copied into the package
+5. Terraform archives the package into the Lambda deployment artifact
+6. The Lambda function is updated with the new version
+
+Build flow:
+
+Terraform
+↓
+build_lambda.sh
+↓
+Docker (Amazon Linux Lambda build image)
+↓
+.build/lambda_pkg
+↓
+archive_file
+↓
+Lambda deployment artifact
+↓
+AWS Lambda version publish
+
+
+Benefits of this approach:
+
+- guarantees dependency compatibility with the AWS Lambda runtime
+- produces deterministic and reproducible builds
+- prevents environment-specific packaging issues
+- separates infrastructure management from packaging logic
+- simplifies future CI/CD integration
+
+Docker builds are used by default to ensure production-safe artifacts.
+
+
 ## Lambda Event Routing
 
 The Bloodhound Lambda entrypoint routes events through
