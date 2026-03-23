@@ -53,6 +53,31 @@ variable "lambda_env" {
   default     = {}
 }
 
+# ------------------------------------------------------------
+# Optional Docker-based Lambda dependency build.
+#
+# When enabled, Lambda dependencies are installed inside the
+# official AWS Lambda runtime container instead of the
+# engineer's local Python environment.
+#
+# This guarantees compatibility with the Lambda runtime and
+# ensures deterministic builds across engineers and CI runs.
+#
+# Example usage:
+#
+# terraform apply -var="use_docker_build=true"
+#
+# Default behavior uses the local Python environment for
+# faster builds during development.
+# ------------------------------------------------------------
+
+variable "use_docker_build" {
+  type        = bool
+  default     = false
+  description = "Build Lambda dependencies using the AWS Lambda Docker runtime."
+}
+
+
 /*
 Optional override for the Lambda alias version.
 

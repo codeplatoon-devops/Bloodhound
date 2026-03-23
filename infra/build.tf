@@ -44,77 +44,72 @@ resource "terraform_data" "build_lambda_pkg" {
 
   triggers_replace = {
 
-  # -------------------------------------------------------------------
-  # Rebuild Lambda when dependencies change
-  # -------------------------------------------------------------------
-  requirements_hash = filesha256("${path.module}/../requirements.txt")
+    # -------------------------------------------------------------------
+    # Rebuild Lambda when dependencies change
+    # -------------------------------------------------------------------
+    requirements_hash = filesha256("${path.module}/../requirements.txt")
 
-  # -------------------------------------------------------------------
-  # Rebuild if main handler changes
-  # -------------------------------------------------------------------
-  lambda_handler_hash = filesha256("${path.module}/../handlers/lambda_function.py")
+    # -------------------------------------------------------------------
+    # Rebuild if main handler changes
+    # -------------------------------------------------------------------
+    lambda_handler_hash = filesha256("${path.module}/../handlers/lambda_function.py")
 
-  # -------------------------------------------------------------------
-  # SAFETY TRIGGER
-  #
-  # Terraform cannot detect changes to application code when the
-  # Lambda package is built locally via `local-exec`.
-  #
-  # We compute a fingerprint (hash) of all Python runtime files so that any change
-  # to the Lambda source forces this resource to rebuild the package.
-  #
-  # Only runtime directories are included to avoid rebuilds caused by
-  # unrelated files (.build, .venv, scripts, tests, etc).
-  # -------------------------------------------------------------------
-  python_sources_hash = sha256(join("", concat(
+    # -------------------------------------------------------------------
+    # SAFETY TRIGGER
+    #
+    # Terraform cannot detect changes to application code when the
+    # Lambda package is built locally via `local-exec`.
+    #
+    # We compute a fingerprint (hash) of all Python runtime files so that any change
+    # to the Lambda source forces this resource to rebuild the package.
+    #
+    # Only runtime directories are included to avoid rebuilds caused by
+    # unrelated files (.build, .venv, scripts, tests, etc).
+    # -------------------------------------------------------------------
+    python_sources_hash = sha256(join("", concat(
 
-    # Hash all Python files inside the main application package
-    [
-      for f in fileset("${path.module}/../bloodhound", "**/*.py") :
-      filesha256("${path.module}/../bloodhound/${f}")
-    ],
+      # Hash all Python files inside the main application package
+      [
+        for f in fileset("${path.module}/../bloodhound", "**/*.py") :
+        filesha256("${path.module}/../bloodhound/${f}")
+      ],
 
-    # Hash Lambda handler entrypoints
-    [
-      for f in fileset("${path.module}/../handlers", "**/*.py") :
-      filesha256("${path.module}/../handlers/${f}")
-    ]
+      # Hash Lambda handler entrypoints
+      [
+        for f in fileset("${path.module}/../handlers", "**/*.py") :
+        filesha256("${path.module}/../handlers/${f}")
+      ]
 
-  )))
-}
-
+    )))
+  }
+  # Build the Lambda package locally using a shell script
   provisioner "local-exec" {
+
+    # --------------------------------------------------------------------
+    # Build Lambda package via external build script
+    #
+    # The packaging logic has been moved to scripts/build_lambda.sh
+    # so that:
+    #
+    #   • Terraform focuses only on infrastructure orchestration
+    #   • build logic becomes easier to maintain
+    #   • Docker-based builds can be supported
+    #
+    # The script prepares:
+    #
+    #   .build/lambda_pkg
+    #
+    # Terraform then archives that directory using archive_file.
+    # --------------------------------------------------------------------
+
     working_dir = "${path.module}/.."
-    command     = <<EOT
-set -euo pipefail
 
-# --------------------------------------------------------------------
-# Clean previous build artifacts
-# --------------------------------------------------------------------
-rm -rf .build
-mkdir -p .build/lambda_pkg
+    command = "bash scripts/build_lambda.sh"
 
-# --------------------------------------------------------------------
-# Install runtime dependencies
-# --------------------------------------------------------------------
-python3 -m pip install --upgrade --no-cache-dir -r requirements.txt -t .build/lambda_pkg
+    environment = {
+      USE_DOCKER_BUILD = var.use_docker_build
+    }
 
-# --------------------------------------------------------------------
-# Copy application source code
-# --------------------------------------------------------------------
-# Engineer note:
-# rsync preserves directory structure and ensures new modules
-# such as bloodhound/aws.py or scanner/ are included automatically.
-rsync -a --exclude "__pycache__" --exclude "*.pyc" bloodhound/ .build/lambda_pkg/bloodhound/
-rsync -a --exclude "__pycache__" --exclude "*.pyc" handlers/ .build/lambda_pkg/handlers/
-
-# --------------------------------------------------------------------
-# Debug visibility (useful for troubleshooting Lambda import errors)
-# --------------------------------------------------------------------
-echo "Prepared package dir: .build/lambda_pkg"
-echo "Lambda package contents:"
-ls -R .build/lambda_pkg
-EOT
     interpreter = ["/bin/bash", "-lc"]
   }
 }
