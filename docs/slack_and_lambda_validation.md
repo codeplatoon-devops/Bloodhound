@@ -15,7 +15,17 @@
 - [Watching Lambda Logs Live](#watching-lambda-logs-live)
 - [Common Failure Scenarios](#common-failure-scenarios)
 
-This document verifies that Slack slash commands are correctly wired to **BloodhoundLambdaV2** and that the Lambda execution can be observed in **CloudWatch Logs**.
+This document verifies that Slack slash commands are correctly wired to **BloodhoundLambdaV2**
+and that Lambda execution can be observed in **CloudWatch Logs**.
+
+Bloodhound uses an event router inside the Lambda handler to determine
+which execution path should run:
+
+Slack HTTP events → Slack handler  
+Scheduled events → scheduled handler  
+Manual invocations (scan/status) → main pipeline (`run()`)
+
+This validation confirms the Slack execution path is functioning correctly.
 
 Use this procedure after:
 - `terraform apply` succeeds
@@ -116,6 +126,17 @@ This message indicates that Slack successfully invoked the Lambda handler and th
 
 17. You should see log lines that correspond to the `/v2_seek` invocation.
 
+Bloodhound logs follow a standardized format:
+
+[BLOODHOUND][EVENT_TYPE][request_id=...]
+
+Example:
+
+[BLOODHOUND][SLACK][request_id=0f6c9c4e-1234-4e1e-9b7f-6b9d3d3a9c2a]
+
+The `request_id` value corresponds to the AWS Lambda invocation ID
+and allows a single execution to be traced across all CloudWatch logs.
+
 ---
 
 ## What You Should Look For in Logs
@@ -145,8 +166,14 @@ scheduled_handler → run_scheduled_scan() → execute_pipeline()
 
 You are confirming these signals:
 
-- A new log stream appears right after you run `/v2_seek`
-- Log lines indicate the slash command request was received
+- A new log stream appears immediately after `/v2_seek` is run
+- The first log line shows the Bloodhound event marker
+
+Example:
+
+[BLOODHOUND][SLACK][request_id=...]
+
+- The same `request_id` appears in all logs for that execution
 - Log lines indicate region scanning activity
 - Log lines indicate Slack message posting
 - No errors occur
@@ -471,16 +498,19 @@ or
 
 When Lambda runs you should see logs similar to:
 
-```
-START RequestId: ...
+START RequestId: 0f6c9c4e-1234-4e1e-9b7f-6b9d3d3a9c2a
+
+[BLOODHOUND][SLACK][request_id=0f6c9c4e-1234-4e1e-9b7f-6b9d3d3a9c2a]
+Event received: {...}
+
 Received Slack slash command
 command=/v2_seek
 Scanning region us-east-1
 Scanning region us-west-2
 Posting Slack summary
-END RequestId: ...
+
+END RequestId: 0f6c9c4e-1234-4e1e-9b7f-6b9d3d3a9c2a
 REPORT Duration: 14110 ms
-```
 
 This confirms the full execution path from Slack → Lambda → AWS scan.
 

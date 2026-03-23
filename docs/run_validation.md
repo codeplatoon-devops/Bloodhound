@@ -34,13 +34,13 @@ This process uses **temporary disposable resources** and is safe when run as des
 
 Run the validation workflow when:
 
-• deploying Bloodhound for the first time
-• modifying Lambda code
-• modifying teardown logic
-• modifying IAM permissions
-• modifying Terraform infrastructure
-• upgrading AWS SDK dependencies
-• before enabling destructive mode in production
+- deploying Bloodhound for the first time
+- modifying Lambda code
+- modifying teardown logic
+- modifying IAM permissions
+- modifying Terraform infrastructure
+- upgrading AWS SDK dependencies
+- before enabling destructive mode in production
 
 You **do not need to run validation for every small code change**, but it should be executed before production use.
 
@@ -110,8 +110,18 @@ Example validation event:
 The Lambda validation handler enables controlled destructive mode
 internally and restricts deletion to the provided validation targets.
 
+Validation events are routed through the Lambda event router
+using the event field:
+
+```json
+"source": "validation"
+```
+
 This allows the full teardown pipeline to execute automatically
 without requiring manual Slack commands.
+
+The validation harness invokes the Lambda function directly,
+bypassing the Slack command interface.
 
 ---
 
@@ -131,14 +141,15 @@ curl https://YOUR_LAMBDA_URL/health
 
 Expected response:
 
+```json
 {
   "ok": true,
   "service": "BloodhoundLambdaV2",
   "status": "healthy"
 }
+```
 
 This check verifies the Lambda deployment without triggering a scan.
-
 
 # Step 3 — Automatic Deletion Verification
 
@@ -169,15 +180,12 @@ Every validation run produces a log file.
 
 Location:
 
-```
-logs/validation/
-```
+
+`logs/validation/`
 
 Example log:
 
-```
-logs/validation/teardown_validation_20260307_143221.log
-```
+`logs/validation/teardown_validation_20260307_143221.log`
 
 Each log records:
 
@@ -185,6 +193,15 @@ Each log records:
 * created resource ID
 * test steps executed
 * final result (PASS / FAIL)
+* Lambda request_id for traceability
+
+During validation runs, Lambda logs include a structured marker:
+
+[BLOODHOUND][VALIDATION][request_id=...]
+
+The request_id corresponds to the AWS Lambda invocation ID
+(context.aws_request_id) and allows a single execution to be
+traced across CloudWatch logs.
 
 Only the **3 most recent logs** are kept automatically.
 
@@ -202,9 +219,9 @@ APPLY_CHANGES=false
 TEARDOWN_SIMULATE=true
 
 Behavior:
-• resources are scanned
-• teardown plan is generated
-• nothing is deleted
+- resources are scanned
+- teardown plan is generated
+- nothing is deleted
 
 
 Simulation Mode
@@ -213,9 +230,9 @@ APPLY_CHANGES=true
 TEARDOWN_SIMULATE=true
 
 Behavior:
-• deletion calls are simulated
-• AWS DryRun APIs are used
-• nothing is deleted
+- deletion calls are simulated
+- AWS DryRun APIs are used
+- nothing is deleted
 
 
 Apply Mode (destructive)
@@ -224,13 +241,12 @@ APPLY_CHANGES=true
 TEARDOWN_SIMULATE=false
 
 Behavior:
-• Bloodhound executes deletion actions
-• non-whitelisted resources may be removed
+- Bloodhound executes deletion actions
+- non-whitelisted resources may be removed
 
 The validation workflow confirms the following systems work together:
 
-The validation workflow confirms the following systems work together:
-
+```text
 | Component                       | Verified |
 | ------------------------------- | -------- |
 | Lambda deployment               | ✓        |
@@ -240,19 +256,19 @@ The validation workflow confirms the following systems work together:
 | teardown plan creation          | ✓        |
 | controlled destructive teardown | ✓        |
 | Slack reporting                 | ✓        |
-
+```
 ---
 
 # Expected Slack Output
 
 When `/v2_seek_destroy CONFIRM` runs successfully, Slack will show a message similar to:
 
-```
+
 Bloodhound v2 — Teardown Results
 
 Deleted resources:
-ec2.instance=1
-```
+
+`ec2.instance=1`
 
 ---
 
@@ -264,9 +280,7 @@ Check the following:
 
 Run:
 
-```
-tools/smoke_test_lambda.sh
-```
+`tools/smoke_test_lambda.sh`
 
 Fix infrastructure problems before continuing.
 
@@ -326,11 +340,9 @@ This returns Bloodhound to **dry-run mode**.
 
 Always run validations in this order:
 
-```
 1. Infrastructure smoke test
 2. Validation harness invocation
 3. Controlled teardown verification
-```
 
 This ensures problems are caught early before destructive operations are attempted.
 
@@ -340,12 +352,8 @@ This ensures problems are caught early before destructive operations are attempt
 
 Slack validation:
 
-```
-docs/validate_slack_lambda.md
-```
+`docs/slack_and_lambda_validation.md`
 
 Architecture and configuration:
 
-```
-docs/bloodhound_v2_plan.md
-```
+`docs/bloodhound_v2_plan.md`

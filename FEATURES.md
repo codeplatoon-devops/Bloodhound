@@ -151,7 +151,6 @@ Supported modes:
 Validation mode is currently disabled in CI but remains available
 for local testing.
 
-
 ## Automated Validation Workflow
 
 Bloodhound includes automated validation workflows that verify:
@@ -165,7 +164,7 @@ Validation uses disposable test resources to ensure safe testing.
 
 Validation can be executed locally using:
 
-tools/run_validation_workflow.sh
+`tools/run_validation_workflow.sh`
 
 This script orchestrates infrastructure smoke tests and controlled
 teardown validation using disposable AWS resources.
@@ -200,3 +199,32 @@ Key components:
 - GitHub Actions automation
 - GitHub OIDC authentication for AWS access
 - validation automation scripts
+- deterministic Lambda event routing
+
+## Lambda Event Routing
+
+The Bloodhound Lambda entrypoint routes events through
+deterministic execution paths to prevent recursion and
+ensure predictable behavior.
+
+Event types:
+
+- Slack HTTP events → Slack command handler
+- Scheduled events → dedicated scheduled handler
+- Default events → main execution pipeline
+
+Example routing:
+
+```text
+Lambda handler
+↓
+event routing (Slack / scheduled / default)
+↓
+scheduled_handler → run_scheduled_scan()
+or
+bloodhound.app.run()
+```
+
+This architecture prevents recursive execution loops
+and ensures scheduled runs do not re-enter the main
+execution pipeline.

@@ -29,7 +29,7 @@ Unlike the Slack validation guide, this test confirms that Bloodhound can:
 - execute a deletion
 - report results back to Slack
 
-This validation intentionally deletes a **temporary disposable resource**.
+This validation intentionally deletes a **temporary disposable AWS resource**.
 
 This procedure should only be performed after the following validations succeed:
 
@@ -42,7 +42,7 @@ This procedure should only be performed after the following validations succeed:
 
 See:
 
-docs/validate_slack_lambda.md
+`docs/slack_and_lambda_validation.md`
 
 ---
 
@@ -218,11 +218,13 @@ environment variables.
 
 The validation script invokes Lambda with a payload similar to:
 
+```json
 {
   "source": "validation",
   "mode": "seek_destroy_validation",
   "target_ids": ["INSTANCE_ID"]
 }
+```
 
 The validation handler performs the following safety steps:
 
@@ -384,21 +386,30 @@ If Bloodhound already deleted the instance, Terraform will simply refresh state.
 
 When teardown executes, CloudWatch logs should show something similar to:
 
-```
 START RequestId
-Received Slack slash command
-command=/v2_seek_destroy
+
+[BLOODHOUND][VALIDATION][request_id=...]
+
+Validation event received
 Building teardown plan
 Executing deletion
 Deleting EC2 instance
 Posting Slack results
+
 END RequestId
 REPORT Duration
-```
+
+Each validation run will include a structured log marker:
+
+[BLOODHOUND][VALIDATION][request_id=...]
+
+The `request_id` corresponds to the AWS Lambda invocation ID
+(`context.aws_request_id`) and allows engineers to trace a
+single execution across all CloudWatch log lines.
 
 Logs can be streamed live using:
 
-```
+```bash
 aws logs tail /aws/lambda/BloodhoundLambdaV2 \
 --region us-west-2 \
 --follow

@@ -1,0 +1,681 @@
+commit 3beb65079f1a8936dabeb81aaf0513b551231710
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 21 15:38:10 2026 -0500
+
+    docs: update and synchronize Bloodhound v2 documentation across operational and infrastructure guides
+
+commit a1683f5c681119ad51c7f8491f06fea16bdb6364
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Fri Mar 20 14:30:15 2026 -0500
+
+    fix(lambda): prevent scheduled recursion and add scheduler validation path
+    
+    - routed scheduled events through dedicated handler instead of run()
+    - added validate_scheduler mode to simulate EventBridge scheduled trigger in GHA
+    - standardized CloudWatch logging across lambda entrypoint
+    - added request_id tracing for improved log visibility
+    
+    Validation:
+    - manual scan/status verified via GHA and CLI
+    - WIP on scheduler path validation via validate_scheduler mode
+
+commit 9a0e73fed8949c6d5897701e45ca6f25eccefe00
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Thu Mar 19 21:24:20 2026 -0500
+
+    fix(lambda): isolate scheduled execution path to address recursion issue
+    
+    - routed scheduled events through dedicated handler instead of run()
+    - added run_scheduled_scan() as explicit scheduled entrypoint
+    - removed scheduled flow from generic run() path
+    - updated lambda router to distinguish scheduled vs default invocations
+    - aligned documentation to reflect actual execution model
+    
+    This change addresses the suspected recursion issue in scheduled Lambda executions.
+    Validation pending via Terraform deploy, GHA, and Slack testing.
+
+commit a0d1648475b52c12c43f42c88e9b4f6d709ce29a
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Tue Mar 17 21:48:57 2026 -0500
+
+    docs(infra): standardize Lambda packaging pipeline and build system documentation
+    
+    * Document script-driven build process (build_lambda.sh)
+    * Introduce layered build directory model (.build/deps, src, lambda_pkg)
+    * Clarify Terraform triggers and packaging flow
+    * Improve troubleshooting for archive/build edge cases
+    * Add guardrails for modifying build pipeline
+    
+    Ensures documentation reflects deterministic, cache-aware Lambda packaging architecture
+
+commit 7cb3f620c194585fddc9389cb2c9bb9fc2a4ed5f
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Mon Mar 16 17:56:46 2026 -0500
+
+    docs: improve Lambda packaging documentation and add dependency resolution troubleshooting
+    
+    Expanded Lambda packaging documentation and troubleshooting guidance for the Bloodhound Lambda deployment.
+    
+    Changes include:
+    - Added explanation of build environment vs Lambda runtime differences
+    - Documented common dependency resolution failures during packaging
+    - Added guidance on avoiding transitive dependency pinning
+    - Expanded Docker-based packaging section for future deterministic builds
+    - Added troubleshooting section covering pip dependency conflicts
+    - Linked packaging documentation with Terraform troubleshooting guide
+    
+    These updates were added after encountering a real dependency conflict
+    between botocore and a manually pinned urllib3 version during Lambda
+    packaging.
+    
+    The documentation now explains:
+    - how Lambda packages are built locally
+    - why boto3 should not be bundled
+    - how dependency conflicts occur
+    - recommended dependency management practices
+    - the long-term plan for Docker-based packaging
+    
+    This improves maintainability of the infrastructure documentation and
+    provides engineers with clear debugging guidance for Lambda packaging failures.
+
+commit e79e6fc85f708e187498962ec92e45d2b159604f
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Mon Mar 16 11:46:29 2026 -0500
+
+    update document
+
+commit 742c78a4173e6c21729cae077f3e7aac49cd6e28
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Mon Mar 16 11:28:52 2026 -0500
+
+    docs: update GitHub automation documentation and architecture flow
+
+commit 2d3fbee70d9fdf1aea42d290b01ebc8d18a02215
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Mon Mar 16 10:39:53 2026 -0500
+
+    Bloodhound: temporarily disable validation workflow in CI
+    
+    - Removed validation option from workflow_dispatch inputs
+    - Validation pipeline still exists but requires CI hardening
+    - Will be re-enabled prior to GA once validation workflow stabilizes
+
+commit 1a567ae55480b33f9d7f7064bcf79d331ba36b2d
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 23:04:21 2026 -0500
+
+    Bloodhound: add Terraform support for validation workflow
+    
+    - Install Terraform 1.6.6 in GitHub Actions CI
+    - Automatically run 'terraform init
+
+commit 6f083ef9870676af9d93a2671edde673072e004c
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 22:46:11 2026 -0500
+
+    Bloodhound: add CI-safe defaults for teardown validation variables
+
+commit ec50cc2b0d95d13c6f83cd9465165474b8ef178b
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 22:40:59 2026 -0500
+
+    Bloodhound: CI and validation hardening
+    
+    - Enabled strict bash mode (set -euo pipefail) in smoke test
+    - Added IAM permissions for CI validation (DescribeLogGroups, GetFunctionUrlConfig)
+    - Added CI-safe AWS account detection when .env is absent
+
+commit 5ceb1b24086a39fac474faefda9ad81dccc9b6b0
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 22:07:50 2026 -0500
+
+    Bloodhound: mask sensitive env vars in CI logs while preserving full output locally
+
+commit 9d8dd3fffc70edeb778ef32ac28e3c7df3ec038b
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 21:48:10 2026 -0500
+
+    Bloodhound: fix CI smoke test and workflow improvements
+    - Added CI-safe validation to Lambda smoke test (no .env required)
+    - Added lambda:GetFunction permission for CI role
+
+commit 5a581d1dd208c93636b3ba448852f8b486097d7c
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 21:07:46 2026 -0500
+
+    fix(ci): improve Bloodhound workflow validation and Lambda troubleshooting
+    
+    - run teardown validation script in CI instead of manual payload construction
+    - add workflow logging to show Bloodhound operation mode
+    - improve GitHub Actions UX with clearer operation visibility
+    - document Terraform Lambda packaging recovery when .build directory is corrupted
+    - update troubleshooting guide with rebuild and validation steps
+
+commit 127292c196d86817098823721afb6591b77e2e7a
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 17:28:49 2026 -0500
+
+    fix(validation): pass required guard fields to validation_handler
+    
+    Bloodhound workflow validation mode now sends:
+    source=validation
+    mode=seek_destroy_validation
+    target_ids=[validation-instance]
+    
+    This satisfies the strict validation checks enforced by
+    validation_handler.py and restores successful validation runs
+    from the GitHub Actions operator workflow.
+
+commit 5f18a3c2766aceb7ee352230d34bf51391275356
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 17:07:20 2026 -0500
+
+    Added concurrency guard (bloodhound-scan) to prevent overlapping
+    scheduled and manual scans.
+
+commit c307b9957d99b3e7bd189af8c467c03436d748ae
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 16:55:22 2026 -0500
+
+    space
+
+commit 5d1f47427ba7fc83f3418b7313a0bc58bcbdee91
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 16:50:33 2026 -0500
+
+    Split Bloodhound workflows into scheduled scan and manual operations
+    
+    invoke_lambda.yml now runs exclusively as the automated cron scanner.
+    Manual operations (scan, validation, status) have been moved to
+    bloodhound_ops.yml and are triggered through workflow_dispatch.
+
+commit f08f2c21f218a4b5f455067e6168b5b2b3daa4d5
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 16:27:17 2026 -0500
+
+    Adds stdout logging at the end of execute_pipeline() so Lambda execution
+    details appear in CloudWatch and GitHub Actions logs.
+
+commit 01146bfc4c908ad17f29acb37caf24bb513a9ea7
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 16:15:22 2026 -0500
+
+    Add Bloodhound execution summary to GitHub Actions logs
+
+commit 34b8c8c52471e21c1f193c881071e22c8babf058
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 16:05:08 2026 -0500
+
+    Add decoded Lambda logs to GitHub Actions output for improved debugging
+
+commit 69a874a6ea9e4cc5d01cdf4f0ed66dfe0208ea97
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 15:58:44 2026 -0500
+
+    update GitHub Actions versions for Node 24 compatibility
+
+commit c375c7e8b930aab1601ca885806ef3988a6f45de
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 15:43:24 2026 -0500
+
+    added debug statements for GA to check output, temporary add
+
+commit 1ee101b10a2fd99df96817ff37349ec7f8358ce1
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 15:33:04 2026 -0500
+
+    - Allow forks of Bloodhound repo to assume role
+    - Restrict OIDC subject to repo:*/Bloodhound:ref:refs/heads/main
+    - Update trust policy automatically if role exists
+    - Improve documentation and security comments
+
+commit 8af92b58ec62b8adc32413d9ebbb7f43677b2139
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 15:10:03 2026 -0500
+
+    Add GitHub OIDC bootstrap script and switch CI authentication to role assumption
+    - Add scripts/bootstrap_github_oidc.sh to configure GitHub OIDC provider and IAM role
+    - Detect AWS account ID dynamically using STS
+    - Add IAM resource tagging for governance and ownership tracking
+    - Add cleanup trap to remove temporary IAM policy artifacts (trust-policy.json, lambda-policy.json)
+    - Update GitHub Actions workflow to use OIDC role assumption
+    - Document GitHub automation and OIDC bootstrap process in README
+
+commit f89fbbe053495a5f78a357d3d3beaa7ed6c3d4f2
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 13:54:30 2026 -0500
+
+    Improve GitHub Actions Lambda invocation workflow and documentation
+    
+    - Add structured CI log groups for improved debugging
+    
+    - Add Lambda error detection and StatusCode validation
+    
+    - Stream CloudWatch Lambda logs into GitHub Actions output
+    
+    - Document GitHub automation in docs/github_actions.md
+    
+    - Update README with GitHub Actions workflow references
+
+commit e91e61ebd1f24fc9f5e33d41bd9ead4fde4c49f2
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 12:32:44 2026 -0500
+
+    updating documentatino. add feautures file
+
+commit 53c90baf7da13d2c1c205918d7917dfac581116f
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 12:06:47 2026 -0500
+
+    updatineg docs
+
+commit c8350cc62c5af9599fa6769f364cf225cfc6d672
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 14 11:34:44 2026 -0500
+
+    add teardown validation workflow and safety improvements
+    
+    This commit introduces the Bloodhound teardown validation system
+    along with several reliability improvements.
+    
+    Key updates:
+    
+    - added strict bash mode (set -euo pipefail) to prevent silent script failures
+    - added Lambda execution metric validation before checking AWS resources
+    - replaced fixed sleep with a loop that waits until EC2 is fully terminated
+    - added workflow logging using RUN_ID for each validation run
+    - added log cleanup to keep only the last 3 validation logs
+    - limited Lambda rebuilds to actual code changes
+    - updated troubleshooting documentation for the build pipeline
+    - confirmed full teardown validation workflow working end-to-end
+    
+    Validation workflow test:
+    
+    1. smoke test checks Lambda configuration
+    2. Terraform creates a disposable EC2 instance
+    3. Lambda teardown deletes the instance
+    4. execution metrics are verified
+    5. EC2 termination is confirmed
+    
+    Result: PASS
+    
+    This validation workflow ensures Bloodhound safely deletes targeted resources.
+
+commit 09b00b23750ab328e921953df778bb09757e00d0
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Thu Mar 12 23:23:35 2026 -0500
+
+    infra: stabilize Lambda validation workflow and packaging
+    
+    Engineering notes:
+    Changes made while validating the Bloodhound teardown workflow
+    and debugging Lambda packaging behavior.
+    
+    Changes:
+    - Add jq validation check to ensure Lambda response success
+    - Add scheduled_handler entrypoint for scheduled scans
+    - Improve Terraform Lambda packaging triggers and debug visibility
+    - Exclude __pycache__ and .pyc files from Lambda bundle
+    - Add AWS CLI '--cli-binary-format raw-in-base64-out' to Lambda invocation workflow
+    - Add Terraform + Lambda troubleshooting documentation
+    
+    Validation:
+    Pipeline verified using run_validation_workflow.sh
+    with successful EC2 teardown validation.
+
+commit 9ecc056e5c0cbf82601ae4c7322cdc954c86e6fc
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Thu Mar 12 21:10:21 2026 -0500
+
+    Bloodhound v2: validation harness routing + documentation alignment
+    
+    - Add explicit event routing in app.py for slack_command, validation, and scheduled sources
+    - Harden validation_handler with source checks and target_ids enforcement
+    - Document validation harness architecture and payload model
+    - Update README to reflect Lambda → app.run() → pipeline execution flow
+    - Clarify dual execution paths (Slack operator vs validation harness)
+    - Align documentation with v2 slash commands and current validation workflow
+    - Fix outdated doc references and legacy command notes
+
+commit 064ffa0f0889152e9650c2f1ad1a19d7b9a0bb17
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Tue Mar 10 22:56:22 2026 -0500
+
+    Bloodhound v2: introduce handlers/services architecture + validation safety improvements (WIP)
+    
+    Summary
+    -------
+    Refactors Bloodhound pipeline structure to separate event handling and operational services.
+    This keeps the orchestration layer clean and improves maintainability of scan, budget, and teardown logic.
+    
+    Major Changes
+    -------------
+    • Introduced new architecture layers
+      - handlers/: event interpretation (Slack, validation harness, scheduled runs)
+      - services/: operational pipeline logic (scan, budget, status, teardown)
+    
+    • Extracted pipeline logic from app.py into service modules:
+      - scan_service.py
+      - budget_service.py
+      - status_service.py
+      - teardown_service.py
+    
+    • Added handler modules:
+      - slack_handler.py
+      - validation_handler.py
+      - scheduled_handler.py
+    
+    • execute_pipeline() now acts as a clean orchestrator coordinating services.
+    
+    Validation Safety Improvements
+    ------------------------------
+    • Added validation-mode safeguards to ensure destructive testing can only affect validation resources.
+    • Validation runs now enforce:
+      - target ID filtering
+      - validation tag checks
+      - restricted teardown scope
+    
+    Validation Workflow (WIP)
+    -------------------------
+    Validation pipeline currently under active testing:
+    
+    Terraform -> create validation instance
+    Validation script -> capture instance ID
+    Lambda invocation -> validation mode
+    Teardown restricted via TEARDOWN_TARGET_IDS
+    Script verifies instance deletion
+    
+    Status
+    ------
+    Validation harness still in progress. Destructive validation behavior being verified before finalizing CI/CD integration.
+
+commit e751b89890a5cdef535f9e4e1e969d5ea69bf5e7
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Mon Mar 9 21:29:31 2026 -0500
+
+    Add /v2_status operational dashboard and finalize Slack command interface
+    
+    - Implement /v2_status Slack command for Bloodhound system status
+    - Add system health indicator (🟢 🟡 🔴) based on teardown configuration and safety limits
+    - Improve Slack report formatting (section dividers, vertical service/action lists, Top Regions Affected)
+    - Update Slack manifest to include /v2_status
+    - Update validation scripts and teardown tooling references
+    - Synchronize documentation across README and docs/* with full v2 command set
+    
+    Commands now supported:
+      /v2_seek
+      /v2_seek_destroy_plan
+      /v2_seek_destroy CONFIRM
+      /v2_status
+
+commit f08e4b056b4d6c3073201f9d80bc1e5ee06591d9
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Mon Mar 9 18:18:20 2026 -0500
+
+    Improve teardown plan Slack messaging and safety visibility
+    - Combined header and mode_text generation into a single decision block
+    - Added explicit DRY RUN banner to prevent operator confusion”
+
+commit ca9ddf47c4b17cdd6658399f117c8bdd7bff90e5
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 7 17:20:47 2026 -0600
+
+    Bloodhound v2: unify Slack command routing, update manifest, and improve teardown validation tooling
+    
+    Core changes
+    - Standardized Slack command routing to maintain internal modes  and
+    - Added support for  preview mode while preserving existing destructive flow
+    - Ensured Lambda worker receives correct execution flags (apply_changes / simulate)
+    - Fixed Slack command handler logic and improved safety gating for destructive operations
+    
+    Slack integration
+    - Updated Slack manifest to include , , , , and
+    - Aligned manifest URLs with Lambda Function URL endpoint
+    - Updated Slack command documentation and operational guidance
+    
+    Infrastructure
+    - Updated Terraform outputs and test resource configuration
+    - Improved Lambda smoke test tooling
+    
+    Validation & tooling
+    - Added automated validation workflow scripts
+    - Improved teardown validation scripts and history utilities
+    - Added operational docs for Slack app usage and troubleshooting
+    
+    Documentation
+    - Updated Slack setup documentation
+    - Updated configuration system documentation
+    - Updated validation workflow documentation
+    - Added troubleshooting and operational runbooks
+
+commit 99f9a2f3296a5f08bc6f74e87f1e74ab69c212ae
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 7 11:49:44 2026 -0600
+
+    Add validation workflow, safety architecture, and configuration documentation
+    
+    - Add automated validation tooling:
+      - tools/run_validation_workflow.sh
+      - tools/smoke_test_lambda.sh
+      - tools/validate_teardown.sh
+      - tools/show_validation_history.sh
+    
+    - Implement controlled teardown validation pipeline
+    
+    - Add Terraform validation resource:
+      - infra/test_resource.tf
+    
+    - Introduce validation logging and history tracking
+    
+    - Add configuration system documentation:
+      - docs/configuration_system.md
+      - docs/run_validation.md
+    
+    - Update teardown validation documentation
+    
+    - Improve README with configuration safety warning and documentation index
+    
+    - Rename architecture document to docs/bloodhound_v2_plan.md
+    
+    - Update env.example with safety guard configuration
+    
+    - Add Terraform variables for validation resources and safety controls
+    
+    This commit introduces a full validation framework for Bloodhound v2 including
+    smoke testing, controlled teardown verification, configuration safety guards,
+    and documentation for operational workflows.
+
+commit 675157a43e1a72c2456d89fa1ab331628ba4d740
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Sat Mar 7 09:39:52 2026 -0600
+
+    Bloodhound v2: add teardown safety controls, validation guides, and deployment guard
+    
+    Infrastructure safety
+    - Add Terraform apply-mode guard preventing deployment when APPLY_CHANGES=true unless allow_apply_mode=true
+    - Add deletion cap via TEARDOWN_MAX_DELETE_COUNT to prevent large accidental teardown operations
+    - Update lambda.tf and variables.tf with documented safety logic and comments
+    
+    Runtime safety
+    - Extend TeardownConfig with max_delete_count
+    - Add executor guard to abort teardown when plan exceeds deletion limit
+    - Preserve simulate-mode protections and dry-run behavior
+    
+    Operational validation
+    - Add docs/validate_teardown.md with full controlled teardown test procedure
+    - Update Slack/Lambda validation documentation and common failure scenarios
+    - Document CLI methods for verifying Lambda environment variables and CloudWatch logs
+    
+    Configuration updates
+    - Update env.example and terraform.tfvars.example to include TEARDOWN_MAX_DELETE_COUNT
+    - Clarify apply-mode behavior and Terraform deployment guard
+    
+    Documentation improvements
+    - Expand README teardown controls and safety model
+    - Update infra README with destructive-mode deployment guard
+    - Improve V2_PLAN and validation guides for operational clarity
+    
+    These changes introduce defense-in-depth protections for Bloodhound teardown operations
+    while providing reproducible validation workflows for engineers.
+
+commit e1672a998b982ea598419b4e8b2c0979e950ca32
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Thu Mar 5 22:00:03 2026 -0600
+
+    bloodhound v2: wire slack commands + terraform safety updates
+    
+    - added terraform aws account guard to prevent deploy to wrong account
+    - added lifecycle.prevent_destroy to lambda iam role and policy
+    - confirmed terraform plan safe (1 add, 2 update, 0 destroy)
+    
+    slack integration
+    - wired /seek and /seek_destroy to lambda function url
+    - verified slack -> lambda -> aws scan flow
+    - confirmed async lambda invocation working
+    - slack messages returning scan + budget + teardown plan
+    
+    validation
+    - ran /seek from slack
+    - confirmed lambda invocation in cloudwatch logs
+    - lambda run time ~14s, memory usage normal
+    - dry-run teardown confirmed (no deletes)
+    
+    docs
+    - added slack validation doc (watching cloudwatch logs)
+    - added safe operations guide for teardown controls
+    - added future infra hardening notes
+    
+    status
+    phase 3 complete (slack wired)
+    phase 4 validation in progress
+
+commit 28435941f3be2326956d477451fd1de39e72a869
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Tue Mar 3 23:09:01 2026 -0600
+
+    feat(infra,docs): introduce Lambda packaging strategy, dev/runtime dependency split, and Slack manifest infrastructure
+    
+    Key changes:
+    - Separate runtime and development dependencies
+      - requirements.txt now contains only Lambda runtime packages
+      - requirements-dev.txt added for local development/testing dependencies
+    - Document Lambda dependency strategy
+      - add docs/lambda_packaging.md explaining:
+        - why boto3 should not be bundled
+        - Lambda runtime dependency behavior
+        - packaging workflow
+        - future Docker-based packaging
+    - Add Lambda packaging flow documentation and diagrams
+    - Introduce Slack manifest-based configuration
+      - infra/slack/bloodhound_v2_manifest.json becomes Slack app source of truth
+      - add infra/slack/README.md documenting manifest structure and change policy
+    - Update docs/SLACK_SETUP.md to support manifest-based setup with manual fallback
+    - Update main README with improved onboarding flow and Slack setup references
+    - Improve infra documentation
+      - clarify Lambda environment variables and secret handling
+      - document Terraform build behavior
+    - Introduce Lambda alias infrastructure for versioned deployments and safe rollback
+      - infra/alias.tf
+      - lambda_alias_version_override variable
+    - Improve Terraform packaging pipeline documentation
+    - Update .gitignore and repo structure for build artifacts
+    - Prepare repo for future deterministic Docker-based Lambda packaging
+    
+    No infrastructure behavior changes yet; Terraform deployment remains ZIP-based.
+    Docker packaging planned for future phase.
+
+commit 24f89cbae79d2668c8d1be540a8e6003e27adcc9
+Author: mmccla1n <mcclainm1k3@gmail.com>
+Date:   Mon Mar 2 21:36:02 2026 -0600
+
+    infra(slack): add Bloodhound-V2 Slack app manifest and update gitignore for infra automation
+
+commit df713fdc2c311340f0421d60dd7ed06aa7a5eb4c
+Author: tsmith4014 <chjthomps@gmail.com>
+Date:   Sat Jan 17 17:00:22 2026 -0600
+
+    plan update
+
+commit 53446beb84c9f1993c0b7584411e89f7f552e98a
+Author: tsmith4014 <chjthomps@gmail.com>
+Date:   Sat Jan 17 16:38:31 2026 -0600
+
+    updated diagram, added .sh resource script for building resources for the demo, feel free to use this just update with your aws profile, it builds 8 ec2, 2 rds and half get whitelisted, cleaned up readme
+
+commit 05babb7b6fa43af19ebecb3b5a76b81f4bdd7c4a
+Author: tsmith4014 <chjthomps@gmail.com>
+Date:   Sun Dec 21 13:47:18 2025 -0600
+
+    updated main readme post root reorg
+
+commit c3e644c9fd13b37b1daa908ff1c42bf5c4b5c3f5
+Author: tsmith4014 <chjthomps@gmail.com>
+Date:   Sun Dec 21 13:45:28 2025 -0600
+
+    chore: reorganize repo layout (handlers/docs/tools)
+    
+    - Move Lambda entrypoint into handlers/ and update Terraform handler + build pipeline
+    - Move docs into docs/ and link from README
+    - Move local runner + AWS helper JSON into tools/
+    - Remove empty scripts directory
+    - Keep functionality unchanged (only paths/organization)
+
+commit 58430cdfa6e9b71e8cf0654f302b9fa54ab84c16
+Author: tsmith4014 <chjthomps@gmail.com>
+Date:   Sat Dec 20 18:36:06 2025 -0600
+
+    feat(v2): modular scanner + Slack reporting + whitelist + safe teardown controls
+    
+    Summary
+    - Replace v1 script with v2 package architecture (scanner/budget/whitelist/teardown).
+    - Slack reporting: scan summary (per region + totals, including 0 counts for scanned types), budget summary, teardown plan/results, and dedicated whitelisted resources list.
+    - Whitelist: tag-based keep rule (default bloodhound:keep=true) plus optional KEEP_RESOURCE_IDS.
+    - Teardown: dry-run by default; apply-mode gated by APPLY_CHANGES and supports simulate mode (TEARDOWN_SIMULATE) plus safety rails (TEARDOWN_TARGET_IDS, TEARDOWN_ALLOW_ALL).
+    - Budgeting: 7-month cohort spend tracking and month-end projection via Cost Explorer.
+    
+    Operational
+    - Add lambda handler entrypoint (lambda_function.lambda_handler) and local runner (run_local.py).
+    - Add env.example and .env auto-loading for local runs.
+    - Add .gitignore to prevent committing secrets/venvs/build zips.
+    - Update requirements to resolve urllib3/botocore conflict.
+    - Add v2 GitHub Actions workflow (invoke_lambda_v2.yml).
+    - Add v2 plan doc and split Slack setup into SLACK_SETUP.md.
+    
+    Notes
+    - v1 is preserved separately under versions/v1_0/ outside this repo directory; v2 deletes/terminations require explicit env flags.
+
+commit dbb5fc8de07f6698ec72cd378982763a5014f12e
+Author: tsmith4014 <chjthomps@gmail.com>
+Date:   Wed Jun 12 10:45:40 2024 -0400
+
+    added architecture diagram
+
+commit 16cc66376ebcae6d56469e6443373edb16ec9f53
+Author: tsmith4014 <chjthomps@gmail.com>
+Date:   Tue Jun 11 14:45:55 2024 -0400
+
+    updated readme steps
+
+commit d62e294887581c24045e90b69ed0ae98aa5d207c
+Author: tsmith4014 <chjthomps@gmail.com>
+Date:   Tue Jun 11 14:38:41 2024 -0400
+
+    added github actions workflow to trigger at 11am and 11pm est
+
+commit d2d2dfe2a190785fe62f829a5f5fee2ed5906b1f
+Author: tsmith4014 <chjthomps@gmail.com>
+Date:   Tue Jun 11 11:10:08 2024 -0400
+
+    added json test event
+
+commit dcde5cd8b027f58c417e69b1b6853f5ad2b3a7fe
+Author: tsmith4014 <chjthomps@gmail.com>
+Date:   Tue Jun 11 10:51:57 2024 -0400
+
+    Updated readme
+
+commit 1ce2aeec4f7564366390fa6d2e5852d81a15705e
+Author: pizzon <nicholas.g.pizzo2311@gmail.com>
+Date:   Tue Dec 19 22:50:35 2023 -0500
+
+    initial commit

@@ -20,9 +20,7 @@ Note:
 
 Some Lambda packaging failures may originate from dependency conflicts
 during the pip installation step. Dependency management rules for the
-Bloodhound Lambda environment are documented in:
-
-`docs/lambda_packaging.md`
+Bloodhound Lambda are documented in this guide.
 
 Engineers encountering dependency resolution errors should review the
 packaging guide before modifying `requirements.txt`.
@@ -36,12 +34,13 @@ safe execution across different invocation types.
 
 Execution model:
 
-Event → Router → Handler → Pipeline
+`Event → Router → Handler → Pipeline`
 
 ### Routing behavior
 
 - Slack HTTP events → handled immediately by Slack handler
 - Scheduled events → routed to `scheduled_handler`
+- Validation events → routed to the validation handler
 - Default/manual events → routed to `run()`
 
 ### Scheduled execution (critical behavior)
@@ -50,7 +49,7 @@ Scheduled events do NOT pass through `run()`.
 
 Instead they follow:
 
-scheduled_handler → run_scheduled_scan() → execute_pipeline()
+`scheduled_handler → run_scheduled_scan() → execute_pipeline()`
 
 This separation prevents:
 
@@ -60,6 +59,26 @@ This separation prevents:
 
 Engineers modifying Lambda execution must ensure scheduled events
 remain isolated from the generic run() path.
+
+---
+
+## Lambda Logging and Traceability
+
+Bloodhound Lambda executions emit structured CloudWatch log markers:
+
+[BLOODHOUND][EVENT_TYPE][request_id=...]
+
+Examples:
+
+[BLOODHOUND][SCHEDULED][request_id=...]
+[BLOODHOUND][SCAN][request_id=...]
+[BLOODHOUND][STATUS][request_id=...]
+
+The request_id corresponds to the AWS Lambda invocation ID
+(context.aws_request_id).
+
+Including the request_id allows engineers to trace individual
+executions across CloudWatch logs and GitHub Actions validation runs.
 
 ---
 
@@ -79,13 +98,12 @@ Example:
 
 ```python
 import boto3
-```
-
 ec2 = boto3.client("ec2")
+```
 
 This works even if boto3 is not included in requirements.txt.
 
-Why boto3 Should NOT Be Bundled
+# Why boto3 Should NOT Be Bundled
 
 AWS recommends not packaging boto3 unless you require a specific version.
 
@@ -97,8 +115,10 @@ The Lambda runtime includes a specific version of boto3 and botocore.
 
 Example runtime versions:
 
+```text
 boto3 1.34.x
 botocore 1.34.x
+```
 
 If a deployment package includes different versions, Python may load
 conflicting dependencies.
@@ -126,9 +146,11 @@ Packaging boto3 introduces additional dependencies.
 
 Example chain:
 
+```text
 boto3
 └── botocore
     └── urllib3 (< 1.27)
+```
 
 If a project forces a newer urllib3 version (for example urllib3==2.x)
 pip will fail to resolve dependencies during packaging.
@@ -173,16 +195,16 @@ Lambda packaging happens in two separate environments.
 Terraform builds the Lambda package locally using a `local-exec` provisioner.
 
 Example command executed during packaging:
-python3 -m pip install -r requirements.txt -t .build/lambda_pkg
 
+```bash
+python3 -m pip install -r requirements.txt -t .build/lambda_pkg
+```
 
 The Python version used here is the Python version installed on the engineer's machine.
 
 Example:
 
-
 Local Python: 3.13
-
 
 ### Runtime Environment (AWS Lambda)
 
@@ -234,7 +256,7 @@ python-dotenv
 
 Avoid pinning dependencies managed by other libraries such as:
 
-```
+```text
 botocore
 urllib3
 s3transfer
@@ -365,12 +387,14 @@ to support dependency caching, deterministic builds, and reliable Terraform exec
 
 Directory layout:
 
+```text
 .build/
   deps/        cached Python dependencies
   src/         copied application source
   lambda_pkg/  final Lambda deployment package
 
 deps/
+```
 
 Contains runtime dependencies installed from requirements.txt.
 
@@ -448,10 +472,10 @@ more robust and reproducible.
 
 This layered build structure provides:
 
-• faster rebuilds  
-• deterministic packaging  
-• safer Terraform execution  
-• reduced dependency installation time
+- faster rebuilds  
+- deterministic packaging  
+- safer Terraform execution  
+- reduced dependency installation time
 
 ## Quick Troubleshooting
 

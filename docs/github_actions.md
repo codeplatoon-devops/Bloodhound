@@ -35,26 +35,39 @@ execution modes.
 The GitHub workflow acts as an external trigger for the Bloodhound
 Lambda scanner.
 
+```text
 Execution flow:
 
     GitHub Actions
         ↓
     AWS Lambda (BloodhoundLambdaV2)
         ↓
-    AWS API Scanning
+    Lambda event router
+        ↓
+    Execution handler (scan / status / scheduled)
+        ↓
+    AWS API scanning
         ↓
     Slack reporting
+```
 
 ---
 
 ## Workflow Location
 
-The GitHub Actions workflow is defined in:
+Bloodhound uses two GitHub Actions workflows.
+
+Scheduled automation workflow:
 
     .github/workflows/invoke_lambda.yml
 
-This workflow is responsible for invoking the Bloodhound Lambda
-scanner and routing execution modes to the Lambda runtime.
+Manual operator workflow:
+
+    .github/workflows/bloodhound_ops.yml
+
+The scheduled workflow runs automated infrastructure scans,
+while the manual workflow allows engineers to invoke specific
+Bloodhound operations directly from the GitHub Actions UI.
 
 ## Workflow Triggers
 
@@ -84,16 +97,26 @@ Engineers can manually invoke the workflow from the GitHub Actions UI.
 
 Location:
 
-    Repository → Actions → Invoke Bloodhound Lambda → Run workflow
+    Repository → Actions → Bloodhound Operations → Run workflow
 
 Manual runs allow engineers to trigger specific execution modes.
 
 Available modes:
 
     scan
-    validation
-    scheduled
     status
+    validate_scheduler
+    validation (currently disabled)
+
+Notes:
+
+- `validate_scheduler` simulates an EventBridge scheduled invocation using:
+```json
+      { "source": "scheduled" }
+```
+
+- The validation workflow exists but is currently disabled in CI while
+  teardown validation infrastructure is being stabilized.
 
 ---
 
@@ -126,12 +149,17 @@ Validation workflows use disposable test resources.
 
 ---
 
-### scheduled
+### validate_scheduler
 
 Simulates the scheduled execution path.
 
-This is useful for testing scheduled behavior without waiting for
-cron execution.
+This mode sends the following payload to the Lambda:
+```json
+    { "source": "scheduled" }
+```
+
+This allows engineers to validate the scheduled execution path
+without waiting for the production scheduler or cron execution.
 
 ---
 

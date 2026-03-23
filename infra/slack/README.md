@@ -4,6 +4,9 @@ This directory contains the Slack App configuration for Bloodhound-V2.
 
 ## Source of Truth
 
+The Slack configuration for Bloodhound is managed via a manifest to
+ensure reproducibility and prevent configuration drift.
+
 Slack configuration is defined in:
 
 infra/slack/bloodhound_v2_manifest.json
@@ -140,30 +143,30 @@ Slack commands provide the operational interface for Bloodhound.
 
 Command flow:
 
-Slack → Lambda Function URL → bloodhound.slack_commands → bloodhound.app
+```text
+Slack
+  ↓
+Lambda Function URL
+  ↓
+Lambda event router
+  ↓
+Slack command handler (bloodhound.slack_commands)
+  ↓
+Execution pipeline (bloodhound.app)
+```
 
 Supported operational commands:
 
-Legacy (v1 compatibility)
-
-/seek
+`/v2_seek`
     Run AWS resource scan
 
-/seek_destroy CONFIRM
-    Execute destructive teardown
-
-Preferred V2 interface
-
-/v2_seek
-    Run AWS resource scan
-
-/v2_seek_destroy_plan
+`/v2_seek_destroy_plan`
     Preview teardown plan
 
-/v2_seek_destroy CONFIRM
+`/v2_seek_destroy CONFIRM`
     Execute destructive teardown
 
-/v2_status
+`/v2_status`
     Show system health and configuration
 
 Slack only triggers execution.  
@@ -177,6 +180,22 @@ Destructive behavior is gated by:
 - Lambda safety rails
 
 Slack never performs deletion directly.
+
+### Lambda Execution Logging
+
+Bloodhound Lambda executions emit structured log markers:
+
+[BLOODHOUND][EVENT_TYPE][request_id=...]
+
+Examples:
+
+[BLOODHOUND][SLACK][request_id=...]
+[BLOODHOUND][SCAN][request_id=...]
+[BLOODHOUND][STATUS][request_id=...]
+
+The request_id corresponds to the AWS Lambda invocation ID
+(context.aws_request_id) and allows engineers to trace a single
+execution across CloudWatch logs.
 
 ---
 
@@ -196,17 +215,10 @@ Changes requiring review:
 
 Current supported command set:
 
-Legacy compatibility:
-
-/seek
-/seek_destroy CONFIRM
-
-Preferred V2 interface:
-
-/v2_seek
-/v2_seek_destroy_plan
-/v2_seek_destroy CONFIRM
-/v2_status
+`/v2_seek`
+`/v2_seek_destroy_plan`
+`/v2_seek_destroy CONFIRM`
+`/v2_status`
 
 ---
 
@@ -238,11 +250,9 @@ From the `infra/` directory:
 
 The script will:
 
-Detect if the IAM role bloodhound-v2-role exists
-
-Detect if the IAM policy bloodhound-v2-policy exists
-
-Import them into Terraform state if necessary
+- Detect if the IAM role `bloodhound-v2-role` exists
+- Detect if the IAM policy `bloodhound-v2-policy` exists
+- Import them into Terraform state if necessary
 
 After running the script, proceed normally:
 

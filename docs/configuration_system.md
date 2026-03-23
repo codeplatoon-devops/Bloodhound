@@ -172,12 +172,19 @@ safe and deterministic behavior.
 
 - Slack commands may use async self-invocation to return immediately
 - Scheduled executions run synchronously through a dedicated path
+- Validation harness invocations execute through a dedicated validation handler
+- Manual operations (scan/status) execute through the main pipeline
 
 Scheduled events do NOT pass through the generic `run()` function.
 
-They follow:
+Instead they follow the dedicated execution path:
 
 scheduled_handler → run_scheduled_scan() → execute_pipeline()
+
+Scheduled events may originate from:
+
+- EventBridge (production scheduler)  
+- GitHub Actions scheduler validation workflows (`validate_scheduler` mode)
 
 This separation prevents recursive execution and ensures that scheduled
 runs cannot re-enter the Lambda routing layer.
@@ -204,37 +211,61 @@ This **defense-in-depth model** is common in internal cloud automation systems.
 
 ---
 
+# Lambda Logging and Traceability
+
+Bloodhound emits standardized CloudWatch log markers for all Lambda
+invocations.
+
+Each invocation includes a structured log header:
+
+[BLOODHOUND][EVENT_TYPE][request_id=...]
+
+Examples:
+
+[BLOODHOUND][SCHEDULED][request_id=abc123]  
+[BLOODHOUND][SCAN][request_id=xyz456]  
+[BLOODHOUND][STATUS][request_id=def789]
+
+Including the Lambda `request_id` (from `context.aws_request_id`)
+allows engineers to trace individual executions through CloudWatch
+logs and quickly identify the event type being processed.
+
+This logging format significantly improves operational debugging and
+scheduler validation.
+
+---
+
 # Teardown Execution Flow
 
 The teardown process follows this sequence of safety checks.
 
-```
+```text
 Engineer / Validation Harness
         │
         ▼
-Teardown Execution Path
+Lambda Invocation
    ├─ Slack Command (/v2_seek_destroy CONFIRM)
    └─ Validation Harness Invocation
         │
         ▼
-Lambda Execution
-   │
-   ▼
+Lambda Router
+        │
+        ▼
+Teardown Execution Path
+        │
+        ▼
 Slack Confirmation Guard
-   │
-   ▼
-Lambda Execution
-   │
-   ▼
+        │
+        ▼
 Configuration Consistency Guard
-   │
-   ▼
+        │
+        ▼
 Deletion Limit Guard
-   │
-   ▼
+        │
+        ▼
 AWS API Delete Calls
-   │
-   ▼
+        │
+        ▼
 CloudWatch Logging
 ```
 

@@ -70,9 +70,9 @@ The Slack interface exposes the following commands:
 | Command | Description |
 |-------|-------------|
 | `/v2_seek` | Runs a non-destructive AWS scan and posts results |
-| /v2_seek_destroy_plan | Generates a teardown preview of resources that would be deleted |
-| /v2_seek_destroy CONFIRM | Executes destructive cleanup of non-whitelisted resources |
-| /v2_status | Returns service status and health information |
+| `/v2_seek_destroy_plan` | Generates a teardown preview of resources that would be deleted |
+| `/v2_seek_destroy CONFIRM` | Executes destructive cleanup of non-whitelisted resources |
+| `/v2_status` | Returns service status and health information |
 
 Example usage:
 
@@ -89,12 +89,14 @@ Example usage:
 Although Slack commands are versioned (`/v2_*`), the internal Lambda
 execution modes remain unchanged.
 
+```text
 | Slack Command | Internal Mode |
 |---------------|--------------|
 | /v2_seek | seek |
 | /v2_seek_destroy_plan | seek_destroy_plan |
 | /v2_seek_destroy| seek_destroy |
 | /v2_status | status |
+```
 
 ## Teardown Safety Workflow
 
@@ -112,11 +114,12 @@ Typical workflow:
 3. /v2_seek_destroy CONFIRM
    Execute the teardown plan and delete resources.
 
-
-
 **Stateless HTTP integration**
 - `socket_mode_enabled = false`
-- Slash commands use a Lambda Function URL (HTTPS endpoint)
+- Slash commands use a Lambda Function URL (HTTPS endpoint).
+
+Requests are received by the Lambda handler and routed through
+the Bloodhound event router to the Slack command handler.
 
 This keeps the architecture simple and serverless.
 
@@ -148,7 +151,6 @@ If the app already exists:
 - Replace contents with the repo JSON
 - Click **Save Changes**
 
-
 ### 2. Install the App
 
 1. Go to **Install App**
@@ -173,7 +175,6 @@ Do NOT commit these to git.
 In Slack:
 
 `/invite @bloodhoundv2`
-
 
 ### 5. Capture Channel IDs
 
@@ -297,9 +298,29 @@ curl $(terraform output -raw bloodhound_lambda_url)/health
 
 Expected response:
 
+```json
 {
   "ok": true,
   "service": "BloodhoundLambdaV2",
   "status": "healthy"
 }
+```
+
+---
+
+## Lambda Execution Logging
+
+Bloodhound Lambda executions emit structured log markers:
+
+[BLOODHOUND][EVENT_TYPE][request_id=...]
+
+Examples:
+
+[BLOODHOUND][SLACK][request_id=...]
+[BLOODHOUND][SCAN][request_id=...]
+[BLOODHOUND][STATUS][request_id=...]
+
+The request_id corresponds to the AWS Lambda invocation ID
+(context.aws_request_id) and allows engineers to trace
+individual executions through CloudWatch logs.
 

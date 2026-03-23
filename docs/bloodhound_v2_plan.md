@@ -24,13 +24,20 @@ Bloodhound v2 is already deployed as a **new** Lambda (`BloodhoundLambdaV2`) so 
 
 ### Invocation paths
 
-- **Scheduled**: GitHub Actions invokes `BloodhoundLambdaV2`, which routes
-  through a dedicated scheduled handler and executes:
+- **Scheduled**: A scheduled event invokes `BloodhoundLambdaV2`.
+
+  Scheduled events may originate from:
+
+  - EventBridge (production scheduler)  
+  - GitHub Actions validation workflows
+
+  These events route through a dedicated scheduled handler:
 
   scheduled_handler → run_scheduled_scan() → execute_pipeline()
 
   Scheduled executions do NOT pass through the generic `run()` function
   to prevent recursive execution.
+
 - **On-demand**: Slack slash commands (`/v2_seek`, `/v2_seek_destroy_plan`, `/v2_seek_destroy CONFIRM`, `/v2_status`) hit a **Lambda Function URL**.
 
 ### What it scans (per region)
@@ -83,6 +90,40 @@ This confirms:
 - routing logic is correct
 - recursion issues are resolved
 - pipeline executes successfully
+
+### Scheduler Validation (GitHub Actions)
+
+The repository includes a GitHub Actions workflow mode that
+simulates scheduled EventBridge invocations.
+
+Mode:
+
+`validate_scheduler`
+
+Example payload used during validation:
+
+```json
+{
+  "source": "scheduled"
+}
+```
+
+This validation ensures:
+
+- scheduled execution runs exactly once
+- recursion does not occur
+- structured logging is emitted
+- request_id tracing appears in CloudWatch logs
+
+Each invocation produces a structured log marker:
+
+[BLOODHOUND][SCHEDULED][request_id=...]
+
+The request_id corresponds to the AWS Lambda invocation ID,
+allowing a single execution to be traced across all CloudWatch log lines.
+
+This workflow allows engineers to validate scheduler behavior
+before enabling production EventBridge triggers.
 
 ### Teardown safety rails (v2)
 
@@ -139,11 +180,13 @@ Validation events are invoked directly by the validation harness.
 
 Example validation payload:
 
+```json
 {
   "source": "validation",
   "mode": "seek_destroy_validation",
   "target_ids": ["i-1234567890"]
 }
+```
 
 The Lambda validation handler performs the following:
 
@@ -232,18 +275,65 @@ This is the canonical list; `env.example` should be treated as the “source of 
 
 Bloodhound uses explicit event routing in the Lambda entrypoint.
 
-Event → Router → Handler → Execution Function
+Event → Lambda Router → Handler → Execution Function
 
 Key rule:
 
 - Scheduled events must not pass through the generic `run()` function
-- Slack and validation events may use different execution paths
+- Slack HTTP events are handled by the Slack command handler
+- Validation events are handled by the validation harness handler
+- Manual invocations (scan/status) execute through the main `run()` pipeline
 
 This prevents:
 
 - recursive execution loops
 - unintended handler re-entry
 - ambiguous control flow
+
+The Lambda entrypoint performs deterministic event routing to ensure
+each invocation type is handled by the correct execution path.
+
+Example routing flow:
+
+```text
+Lambda handler
+    ↓
+event routing (Slack / scheduled / validation / default)
+    ↓
+
+Slack:
+    handle_slack_command_http()
+
+Scheduled:
+    scheduled_handler → run_scheduled_scan()
+
+Validation:
+    validation handler → controlled teardown validation
+
+Default:
+    bloodhound.app.run()
+```
+
+### Structured Logging
+
+Bloodhound emits standardized CloudWatch log markers to simplify
+debugging and operational tracing.
+
+Each Lambda invocation logs a structured header:
+
+[BLOODHOUND][EVENT_TYPE][request_id=...]
+
+Examples:
+
+[BLOODHOUND][SCHEDULED][request_id=abc123]
+[BLOODHOUND][SCAN][request_id=xyz456]
+[BLOODHOUND][STATUS][request_id=def789]
+
+The request_id value comes from the AWS Lambda context object
+(`context.aws_request_id`) and uniquely identifies each invocation.
+
+This allows engineers to quickly identify invocation types and
+trace individual Lambda executions through CloudWatch logs.
 
 ### Code structure (current)
 

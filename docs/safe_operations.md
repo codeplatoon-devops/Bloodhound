@@ -22,7 +22,7 @@ Bloodhound is capable of identifying and deleting unused cloud infrastructure. B
 
 Bloodhound follows a layered safety model:
 
-```
+```text
 Detection
    ↓
 Planning
@@ -30,7 +30,7 @@ Planning
 Dry-run validation
    ↓
 Execution Path
-   ├─ Operator confirmation (Slack)
+   ├─ Operator confirmation (Slack command)
    └─ Validation harness (automated testing)
    ↓
 Deletion
@@ -162,13 +162,20 @@ TEARDOWN_TARGET_IDS=i-0123456789abcdef
 
 Then execute one of the following:
 
-Operator-triggered deletion (Slack):
+Operator-triggered deletion (Slack command path):
 
 /v2_seek_destroy CONFIRM
 
 or automated validation execution:
 
-validation harness → Lambda validation event
+validation harness → Lambda validation event invocation
+
+```json
+(source: "validation")
+```
+
+Validation events are routed through the Lambda event router
+and handled by the validation execution path.
 
 ---
 
@@ -261,6 +268,24 @@ TEARDOWN_SIMULATE=true
 2. Redeploy or update Lambda environment variables.
 
 This immediately disables destructive actions.
+
+---
+
+# Lambda Execution Logging
+
+All Bloodhound Lambda executions emit structured log markers:
+
+[BLOODHOUND][EVENT_TYPE][request_id=...]
+
+Examples:
+
+[BLOODHOUND][SCAN][request_id=...]
+[BLOODHOUND][SCHEDULED][request_id=...]
+[BLOODHOUND][VALIDATION][request_id=...]
+
+The request_id corresponds to the AWS Lambda invocation ID
+(context.aws_request_id) and allows engineers to trace
+individual executions through CloudWatch logs.
 
 ---
 
