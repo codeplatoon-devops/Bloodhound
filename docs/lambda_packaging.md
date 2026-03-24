@@ -478,18 +478,35 @@ Lambda deployment
 
 ## Recommended Build Best Practices
 
-Bloodhound currently builds Lambda packages using the developer's local Python environment.
+Bloodhound supports two Lambda packaging methods:
 
-This works because the project dependencies are pure Python.
+1) Docker-based build (recommended)
+2) Local Python build (fallback)
 
-However, the recommended long-term approach is to package Lambda dependencies inside a Docker container that matches the Lambda runtime.
+Docker builds are the preferred method because they ensure the
+build environment matches the AWS Lambda runtime.
 
-Benefits:
+Using Docker provides several advantages:
 
 - deterministic builds
 - consistent dependency resolution
-- matching runtime environment
+- matching Lambda runtime environment
 - reduced risk of packaging failures
+- consistent builds across different developer machines
+
+Docker builds use the AWS SAM build container:
+
+public.ecr.aws/sam/build-python3.10
+
+This container provides the same runtime environment used by AWS
+Lambda for dependency compilation.
+
+Example Docker-enabled build:
+
+terraform apply -var="use_docker_build=true"
+
+When Docker mode is disabled, Bloodhound falls back to using the
+developer's local Python environment to install dependencies.
 
 ## Lambda Build Directory Structure
 

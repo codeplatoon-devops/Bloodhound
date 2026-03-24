@@ -88,8 +88,18 @@ Preferred v2 command interface:
 
 Important:
 
-The `url` field is a placeholder during setup.  
-After Lambda deployment, it must be updated to the Lambda Function URL.
+The `url` field in the manifest is a placeholder during setup.
+
+After Terraform deploys the Lambda function, the Slack Request URL
+for each slash command must be updated to the Lambda Function URL
+output by Terraform.
+
+Example:
+
+https://<lambda-function-id>.lambda-url.<region>.on.aws
+
+This URL becomes the public HTTPS endpoint used by Slack to
+invoke Bloodhound.
 
 Note:
 
@@ -150,7 +160,9 @@ Lambda Function URL
   ↓
 Lambda event router
   ↓
-Slack command handler (bloodhound.slack_commands)
+Slack handler (bloodhound.handlers.slack_handler)
+  ↓
+Slack command parser (bloodhound.slack_commands)
   ↓
 Execution pipeline (bloodhound.app)
 ```
@@ -173,11 +185,22 @@ Slack only triggers execution.
 
 All scanning and deletion logic lives inside AWS Lambda.
 
-Destructive behavior is gated by:
+### Note:
 
-- confirmation token (`CONFIRM`)
-- environment variables
-- Lambda safety rails
+Slack never performs AWS operations directly.
+
+Slack only sends HTTPS requests to the Lambda Function URL.
+All scanning, planning, and deletion logic runs entirely inside
+the Bloodhound Lambda execution environment.
+
+### Destructive behavior is gated by:
+
+Destructive behavior is gated by multiple safety controls:
+
+- confirmation token (`CONFIRM`) sent in the slash command
+- environment configuration (APPLY_CHANGES, TEARDOWN_SIMULATE)
+- Lambda safety rails that prevent destructive execution unless
+  explicitly enabled
 
 Slack never performs deletion directly.
 
@@ -219,63 +242,4 @@ Current supported command set:
 `/v2_seek_destroy_plan`
 `/v2_seek_destroy CONFIRM`
 `/v2_status`
-
----
-
-# Terraform First-Time Setup (Existing AWS Resources)
-
-If the IAM role or IAM policy already exist in the AWS account,
-Terraform must import them into state before the first `terraform apply`.
-
-This situation commonly occurs when:
-
-- Bloodhound resources were created manually
-- The project was previously deployed outside Terraform
-- The AWS account already contains earlier Bloodhound infrastructure
-
-To prevent Terraform errors such as:
-
-EntityAlreadyExists: Role with name bloodhound-v2-role already exists
-
-this repository includes a helper script that automatically imports
-existing resources into Terraform state if they are detected.
-
-### Run the bootstrap helper
-
-From the `infra/` directory:
-
-```bash
-./bootstrap_imports.sh
-```
-
-The script will:
-
-- Detect if the IAM role `bloodhound-v2-role` exists
-- Detect if the IAM policy `bloodhound-v2-policy` exists
-- Import them into Terraform state if necessary
-
-After running the script, proceed normally:
-
-terraform apply
-
-When this step is required
-
-You typically only need to run the bootstrap script:
-
-the first time Terraform is introduced into an AWS account
-
-when existing infrastructure already exists
-
-Once resources are managed by Terraform, this step is no longer necessary.
-
-Why this script exists
-
-Terraform cannot automatically adopt resources that already exist in AWS.
-
-The bootstrap script ensures Terraform can safely begin managing
-existing infrastructure without requiring engineers to manually run
-terraform import commands.
-
-This helps avoid common onboarding errors and keeps infrastructure
-management consistent across environments.
 

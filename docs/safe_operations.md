@@ -1,5 +1,7 @@
 # Safe Operations Guide (Bloodhound V2)
 
+⚠️  Bloodhound must always run in dry-run mode unless explicitly validating teardown logic.
+
 ## Table of Contents
 
 - [Core Safety Principles](#core-safety-principles)
