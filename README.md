@@ -74,24 +74,47 @@ If you need to create a Slack bot from scratch, see `docs/SLACK_SETUP.md`.
 
 ![AWS Architecture Diagram (v2)](assets/bloodhound_lambda_architecture_v2.svg)
 
+
+---
+
+## AFTER (replace that entire block)
+
+```markdown
 ### Lambda Packaging Pipeline
 
-Bloodhound builds the Lambda deployment package locally using Terraform.
+Bloodhound builds the Lambda deployment package automatically during
+`terraform apply`.
 
-The packaging system separates dependency installation from application
-source copying to ensure fast incremental builds and deterministic packaging.
+Terraform invokes the build script:
+
+`scripts/build_lambda.sh`
+
+The script prepares the Lambda package directory:
+
+`.build/lambda_pkg`
+
+Terraform then archives the package and deploys the Lambda.
 
 ```text
 terraform apply
       ↓
-build_lambda_pkg (Terraform build trigger)
+terraform_data.build_lambda_pkg
       ↓
 scripts/build_lambda.sh
       ↓
-.build directory layers
+.build/lambda_pkg
       ↓
-Lambda deployment archive
+archive_file
+      ↓
+.build/bloodhound_lambda_v2.zip
+      ↓
+Lambda deployment
 ```
+
+For detailed build pipeline documentation see:
+
+infra/README.md
+docs/lambda_packaging.md
 
 ## ⚠️ Safety Notice — Read Before Running Bloodhound
 
@@ -407,6 +430,21 @@ For a deeper explanation of the packaging architecture see:
 
 `docs/lambda_packaging.md`
 
+### Forcing a Lambda rebuild
+
+Terraform only rebuilds the Lambda package when runtime source code
+changes are detected.
+
+If you modify packaging logic or the build script, you may need to
+force Terraform to rebuild the Lambda package.
+
+Run:
+
+```bash
+terraform apply -replace=terraform_data.build_lambda_pkg
+```
+This forces Terraform to rerun the build step and recreate the
+Lambda deployment package.
 ---
 
 ## Deploy to AWS Lambda (v2)
@@ -536,7 +574,7 @@ terraform apply
 
 Terraform will automatically:
 
-Build the Lambda deployment package locally
+Build the Lambda deployment package using `scripts/build_lambda.sh`
 
 Install runtime dependencies from requirements.txt
 

@@ -213,7 +213,7 @@ inside a Docker container that mirrors the AWS Lambda runtime.
 Build process:
 
 1. Terraform triggers the Lambda build script
-2. The script launches the AWS SAM build container
+2. The script launches the AWS Lambda runtime container
 3. Python dependencies are installed from `requirements.txt`
 4. Bloodhound application source code is copied into the package
 5. Terraform archives the package into the Lambda deployment artifact
@@ -225,7 +225,7 @@ Terraform
 ↓
 build_lambda.sh
 ↓
-Docker (Amazon Linux Lambda build image)
+Docker (Amazon Lambda runtime container)
 ↓
 .build/lambda_pkg
 ↓
@@ -236,16 +236,24 @@ Lambda deployment artifact
 AWS Lambda version publish
 
 
-Benefits of this approach:
+# Benefits of this approach:
 
 - guarantees dependency compatibility with the AWS Lambda runtime
 - produces deterministic and reproducible builds
 - prevents environment-specific packaging issues
 - separates infrastructure management from packaging logic
 - simplifies future CI/CD integration
+- allows user to force Lambda rebuilds when packaging logic changes
 
-Docker builds are used by default to ensure production-safe artifacts.
+Docker builds are used by default to ensure production-safe and
+runtime-compatible Lambda artifacts.
 
+If the build pipeline or packaging script changes, users can force
+Terraform to rebuild the Lambda package using:
+
+```bash
+terraform apply -replace=terraform_data.build_lambda_pkg
+```
 
 ## Lambda Event Routing
 

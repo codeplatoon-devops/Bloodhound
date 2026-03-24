@@ -269,6 +269,38 @@ These hashes determine when Terraform rebuilds the Lambda package.
 
 ---
 
+## Local Lambda Environment Debugging (Optional)
+
+If deeper debugging is required, you can run the Lambda runtime
+and Lambda build environments locally using Docker.
+
+This can help diagnose packaging or dependency issues before
+deploying with Terraform.
+
+Simulate the **Lambda runtime environment**:
+
+docker run -it public.ecr.aws/lambda/python:3.10 bash
+
+This container mirrors the environment used by AWS Lambda
+when executing the deployed function.
+
+Simulate the **Lambda build environment**:
+
+docker run -it public.ecr.aws/sam/build-python3.10 bash
+
+This container matches the environment used to build Lambda
+dependencies and install packages compatible with the
+Python 3.10 Lambda runtime.
+
+Using these containers allows engineers to:
+
+• verify Python imports  
+• test dependency compatibility  
+• inspect the Lambda runtime filesystem  
+• reproduce build issues locally
+
+---
+
 # When This Problem Commonly Appears
 
 This issue most frequently occurs after:

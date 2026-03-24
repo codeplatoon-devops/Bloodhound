@@ -122,6 +122,21 @@ terraform_data.build_lambda_pkg
       ↓
 scripts/build_lambda.sh
       ↓
+build mode
+   ├─ Docker build (default)
+   │     ↓
+   │ Docker (AWS Lambda runtime container)
+   │     ↓
+   │ pip install dependencies
+   │
+   └─ Local build (fallback)
+         ↓
+      python3 + pip
+         ↓
+      pip install dependencies
+      ↓
+copy application source
+      ↓
 .build/
    deps/        cached Python dependencies
    src/         copied application source
@@ -166,10 +181,27 @@ Bloodhound uses a layered build system to improve performance and reliability.
 
 This structure provides:
 
-- faster rebuilds (dependencies are cached)
-- deterministic builds (optional Docker support)
+- faster rebuilds (dependencies can be reused across builds)
+- deterministic builds using the Lambda runtime container
+- separation of dependency installation and source packaging
 - safer Terraform execution (prevents empty archive errors)
 - improved CI reliability
+
+### Forcing a Lambda Rebuild
+
+Terraform automatically rebuilds the Lambda package when
+application code or `requirements.txt` changes.
+
+If the packaging logic or build script changes, Terraform
+may not detect the modification automatically.
+
+Engineers can force a rebuild using:
+
+```bash
+terraform apply -replace=terraform_data.build_lambda_pkg
+```
+This forces Terraform to rerun the Lambda build pipeline and
+recreate the deployment artifact.
 
 ## Python Version Requirement for Lambda Packaging
 
@@ -184,11 +216,17 @@ Dependency installation is handled by the build script:
 
 `scripts/build_lambda.sh`
 
-By default, dependencies are installed using the local Python environment.
+By default, the Lambda package is built using Docker to ensure
+the dependency environment matches the AWS Lambda runtime.
 
-Optionally, Docker can be used to ensure compatibility with the Lambda runtime:
+Docker builds run inside the official AWS Lambda runtime container:
 
-terraform apply -var="use_docker_build=true"
+public.ecr.aws/lambda/python:3.10
+
+If Docker is unavailable, engineers can temporarily use a local
+Python environment instead:
+
+`terraform apply -var="use_docker_build=false"`
 
 Docker builds use the AWS Lambda runtime container:
 
