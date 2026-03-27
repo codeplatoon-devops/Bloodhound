@@ -5,11 +5,23 @@
 Engineers working on Lambda packaging or Terraform deployment should
 review `docs/lambda_packaging.md` before modifying the build pipeline.
 
-New to the project?
+## 🚀 Getting Started
 
-Start here:
+New to Bloodhound?
 
-👉 [FEATURES.md](FEATURES.md) — high-level overview of what Bloodhound does.
+Start with these documents:
+
+📊 **Architecture Overview**  
+→ [docs/architecture_overview.md](docs/architecture_overview.md)
+
+🎬 **Quick Demo Guide (Slack, GitHub Actions, Validation)**  
+→ [docs/quick_demo.md](docs/quick_demo.md)
+
+📘 **Feature Overview**  
+→ [FEATURES.md](FEATURES.md)
+
+These documents explain how Bloodhound works, how to operate it, and how
+to run common workflows.
 
 For deeper engineering documentation:
 
