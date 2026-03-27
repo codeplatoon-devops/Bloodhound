@@ -956,7 +956,7 @@ is provided below.
 
 📄 View guide:
 
-[CloudWatch Log Navigation](docs/demo/cloudwatch_log_navigation.pdf)
+[CloudWatch Log Navigation](demo/cloudwatch_log_navigation.pdf)
 
 The guide includes screenshots showing:
 
@@ -1097,7 +1097,7 @@ This log shows the complete lifecycle:
 
 📄 View full validation log:
 
-[Teardown Validation Workflow Log](docs/demo/teardown_validation_workflow.pdf)
+[Teardown Validation Workflow Log](demo/teardown_validation_workflow.pdf)
 
 The validation workflow ensures that Bloodhound’s destructive pipeline works correctly before enabling deletion in production environments.
 
