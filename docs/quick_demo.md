@@ -537,6 +537,8 @@ through configuration and deployment controls.
 
 Bloodhound can run automatically using GitHub Actions.
 
+![GitHub Actions Scheduled Scan](images/github_actions_invoke_lambda_scan.png)
+
 This repository includes a scheduled workflow that invokes the Bloodhound
 Lambda function on a fixed schedule.
 
@@ -634,17 +636,12 @@ observability during CI runs.
 
 ---
 
-### Screenshot
-
-![GitHub Actions Scheduled Scan](images/github_actions_invoke_lambda_scan.png)
-
-
----
-
 # Scenario 6 — Manual Operations (GitHub Actions)
 
 Bloodhound operators can manually trigger infrastructure operations
 directly from the GitHub Actions interface.
+
+![GitHub Actions Manual Operations](images/github_actions_manual_ops.png)
 
 Workflow file:
 
@@ -858,12 +855,6 @@ Operators can view the full logs directly in the AWS Console:
 
 ---
 
-### Screenshot
-
-![GitHub Actions Manual Operations](images/github_actions_manual_ops.png)
-
----
-
 # Scenario 7 — CloudWatch Log Inspection
 
 All Bloodhound executions emit structured logs to CloudWatch.
@@ -975,8 +966,6 @@ The guide includes screenshots showing:
 - selecting a log stream
 - inspecting Lambda execution logs
 ---
-
-### Screenshot
 
 ![CloudWatch Logs](images/cloudwatch_logs.png)
 
