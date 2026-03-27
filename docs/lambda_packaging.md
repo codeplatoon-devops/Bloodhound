@@ -14,7 +14,8 @@
 This document explains how Bloodhound packages dependencies for AWS Lambda
 and why certain libraries should not be bundled with the deployment package.
 
-It also describes future improvements such as Docker-based builds.
+It also describes the Docker-based build system used to ensure
+deterministic Lambda packaging and runtime compatibility.
 
 Note:
 
@@ -61,6 +62,65 @@ Engineers modifying Lambda execution must ensure scheduled events
 remain isolated from the generic run() path.
 
 ---
+## Bloodhound Application Architecture
+
+The Bloodhound Lambda is organized using a layered architecture
+to separate AWS event handling, orchestration logic, and AWS
+resource scanning functionality.
+
+Directory layout inside the Lambda package:
+
+bloodhound/
+    config/      runtime configuration and environment handling
+    handlers/    internal request handlers
+    scanner/     AWS resource discovery logic
+    services/    orchestration and service layer logic
+    teardown/    infrastructure cleanup planning and execution
+
+Responsibilities:
+
+handlers
+    interpret events and route them into the service layer
+
+services
+    coordinate higher-level operations such as scanning,
+    status checks, and teardown workflows
+
+scanner
+    interact with AWS APIs to discover infrastructure resources
+
+teardown
+    plan and execute resource cleanup actions
+
+---
+
+## Lambda Entry Point
+
+AWS Lambda invokes the function defined in:
+
+handlers/lambda_function.py
+
+This file acts as the Lambda entrypoint and is responsible for receiving
+AWS events and routing them into the Bloodhound execution pipeline.
+
+Execution flow:
+
+AWS Lambda
+      │
+      ▼
+handlers/lambda_function.py
+      │
+      ▼
+bloodhound.handlers.*
+      │
+      ▼
+service layer
+
+Separating the Lambda entrypoint from the application modules ensures
+that AWS-specific logic remains isolated from the core Bloodhound
+application code.
+
+--- 
 
 ## Lambda Logging and Traceability
 
@@ -186,6 +246,22 @@ Terraform packaging only uses `requirements.txt` to ensure that the
 Lambda deployment package contains only the dependencies required
 for runtime execution.
 
+## Python Packaging Metadata
+
+During dependency installation, pip may create additional metadata
+directories inside the Lambda package.
+
+Examples include:
+
+*.dist-info
+bin/
+
+These directories are normal artifacts created by Python packaging
+and contain metadata such as version information and package records.
+
+They do not affect Lambda execution and are safe to include in the
+deployment package.
+
 ## Build Environment vs Lambda Runtime
 
 Lambda packaging happens in two separate environments.
@@ -289,14 +365,19 @@ terraform_data.build_lambda_pkg
 scripts/build_lambda.sh
         │
         ▼
-Prepare build directories
-.build/deps
-.build/src
-.build/lambda_pkg
-        │
-        ▼
-Install runtime dependencies
-(requirements.txt)
+Select build mode
+   ├─ Docker build (default)
+   │     ↓
+   │ Docker container
+   │ public.ecr.aws/sam/build-python3.10
+   │     ↓
+   │ pip install dependencies
+   │
+   └─ Local build (--local)
+         ↓
+      python3 + pip
+         ↓
+      pip install dependencies
         │
         ▼
 Copy application source
@@ -316,10 +397,29 @@ archive_file provider
 Lambda deployment
 ```
 
+## Lambda Deployment Artifact
+
+Terraform creates the Lambda deployment package by archiving:
+
+.build/lambda_pkg
+
+The resulting deployment artifact is:
+
+.build/bloodhound_lambda_v2.zip
+
+This ZIP file is the artifact uploaded to AWS Lambda.
+
+Terraform's archive_file provider constructs this archive automatically
+during `terraform apply`.
+
+If this file is missing or empty, the Lambda build step likely failed
+before the archive stage.
+
+
 ## Docker-Based Packaging (Optional)
 
 Bloodhound supports building Lambda dependencies inside a Docker container
-that matches the Lambda runtime environment.
+that matches the Lambda runtime build environment.
 
 This mode is optional and can be enabled when deterministic builds are required
 or when dependencies include compiled libraries.
@@ -330,24 +430,35 @@ Example:
 
 Docker builds use the AWS Lambda runtime container:
 
-`public.ecr.aws/lambda/python:3.10`
+`public.ecr.aws/sam/build-python3.10`
+
+This container includes the correct Python runtime, pip, and build tools
+required to install dependencies compatible with the AWS Lambda Python 3.10
+runtime.
 
 When Docker mode is enabled, dependency installation runs inside the
 container instead of the engineer's local Python environment.
 
-This prevents dependency inconsistencies caused by engineers using different local Python versions.
+This prevents dependency inconsistencies caused by engineers using
+different local Python versions.
 
-Example Lambda runtime container:
+The AWS Lambda runtime itself remains:
 
 `public.ecr.aws/lambda/python:3.10`
 
+However, Bloodhound packages dependencies using the SAM build container
+so that dependency installation occurs in a build environment aligned
+with the Lambda Python 3.10 runtime.
+
+
+Example:
 
 ```text
 terraform apply
         │
         ▼
 Docker build container
-(public.ecr.aws/lambda/python:3.10)
+(public.ecr.aws/sam/build-python3.10)
         │
         ▼
 pip install runtime dependencies
@@ -367,18 +478,35 @@ Lambda deployment
 
 ## Recommended Build Best Practices
 
-Bloodhound currently builds Lambda packages using the developer's local Python environment.
+Bloodhound supports two Lambda packaging methods:
 
-This works because the project dependencies are pure Python.
+1) Docker-based build (recommended)
+2) Local Python build (fallback)
 
-However, the recommended long-term approach is to package Lambda dependencies inside a Docker container that matches the Lambda runtime.
+Docker builds are the preferred method because they ensure the
+build environment matches the AWS Lambda runtime.
 
-Benefits:
+Using Docker provides several advantages:
 
 - deterministic builds
 - consistent dependency resolution
-- matching runtime environment
+- matching Lambda runtime environment
 - reduced risk of packaging failures
+- consistent builds across different developer machines
+
+Docker builds use the AWS SAM build container:
+
+public.ecr.aws/sam/build-python3.10
+
+This container provides the same runtime environment used by AWS
+Lambda for dependency compilation.
+
+Example Docker-enabled build:
+
+terraform apply -var="use_docker_build=true"
+
+When Docker mode is disabled, Bloodhound falls back to using the
+developer's local Python environment to install dependencies.
 
 ## Lambda Build Directory Structure
 
@@ -389,41 +517,45 @@ Directory layout:
 
 ```text
 .build/
-  deps/        cached Python dependencies
-  src/         copied application source
-  lambda_pkg/  final Lambda deployment package
-
-deps/
+  lambda_pkg/  prepared Lambda deployment package
+   bloodhound_lambda_v2.zip    final Lambda deployment artifact
 ```
 
-Contains runtime dependencies installed from requirements.txt.
+Runtime dependencies are installed directly into:
 
-Dependencies are installed into this directory using pip. Because dependency
-installation is typically the slowest part of the Lambda packaging process,
-this directory is cached between builds.
+.build/lambda_pkg
 
-Dependencies are only reinstalled when requirements.txt changes.
+The build script installs dependencies from `requirements.txt`
+before copying the Bloodhound application source.
 
-This significantly reduces build time when engineers repeatedly run:
+Lambda requires all modules to exist directly on the Python import path.
 
-terraform apply
+For this reason, dependencies are installed directly into the root
+of the deployment package rather than inside a nested site-packages
+directory.
 
-src/
+Example structure:
 
-Contains the application source copied from:
+.build/lambda_pkg/
+    bloodhound/
+    handlers/
+    slack_sdk/
+    slack/
+    dotenv/
 
-bloodhound/
-handlers/
+This flattened layout ensures Python can resolve imports correctly
+during Lambda execution.
 
-Separating the source layer from the dependency layer ensures that source
-code changes do not require reinstalling dependencies.
-
-When application code changes, only this directory is refreshed.
 
 lambda_pkg/
 
-This directory contains the final Lambda deployment package assembled from
-both dependencies and application source.
+This directory contains the final Lambda deployment package.
+
+The build script installs runtime dependencies and then copies
+the Bloodhound application source into this directory.
+
+Terraform's `archive_file` provider creates the Lambda deployment
+archive from this directory.
 
 The Terraform archive_file provider creates the Lambda deployment archive
 from this directory.
@@ -432,13 +564,13 @@ Why this structure exists
 
 This layered build design prevents several common Lambda packaging failures.
 
-Prevents repeated dependency installs
+Ensures deterministic Lambda packages
 
-Without dependency caching, every Terraform run would reinstall Python
-dependencies. This can add 30–60 seconds to each build.
+Each Terraform run rebuilds the deployment package from scratch,
+ensuring no stale dependencies or files remain from previous builds.
 
-Caching dependencies allows Terraform to rebuild Lambda packages quickly
-when only source code changes.
+This guarantees the Lambda deployment artifact always reflects
+the current project state.
 
 Prevents Terraform archive failures
 

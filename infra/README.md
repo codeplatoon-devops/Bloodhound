@@ -17,38 +17,63 @@ This directory provisions the AWS infrastructure for running Bloodhound v2 with 
 
 We use a **Lambda Function URL** (single endpoint) for `/v2_seek` and `/v2_seek_destroy`.
 
-## First-Time Terraform Setup
+## First-Time Terraform Setup (Existing AWS Resources)
 
-If the AWS account already contains Bloodhound resources
-(for example IAM roles or policies created manually or by
-earlier deployments), Terraform must import them before the
-first `terraform apply`.
+If the IAM role or IAM policy already exist in the AWS account,
+Terraform must import them into state before the first `terraform apply`.
 
-Terraform cannot automatically adopt existing AWS resources.
+This situation commonly occurs when:
 
-To simplify this process, this repository includes a helper script:
+- Bloodhound resources were created manually
+- The project was previously deployed outside Terraform
+- The AWS account already contains earlier Bloodhound infrastructure
+
+To prevent Terraform errors such as:
+
+EntityAlreadyExists: Role with name bloodhound-v2-role already exists
+
+this repository includes a helper script that automatically imports
+existing resources into Terraform state if they are detected.
+
+### Run the bootstrap helper
+
+From the `infra/` directory:
 
 ```bash
-cd infra
 ./bootstrap_imports.sh
 ```
 
 The script will:
 
-- detect existing IAM role `bloodhound-v2-role`
-- detect existing IAM policy `bloodhound-v2-policy`
-- import them into Terraform state if necessary
+Detect if the IAM role bloodhound-v2-role exists
+Detect if the IAM policy bloodhound-v2-policy exists
+Import them into Terraform state if necessary
 
-After running the bootstrap script, proceed with deployment:
+After running the script, proceed normally:
 
 terraform init
 terraform apply
+When this step is required
 
-This step is typically required only once when Terraform is
-introduced into an AWS account that already contains Bloodhound
-infrastructure.
+You typically only need to run the bootstrap script:
 
-### What Terraform creates
+the first time Terraform is introduced into an AWS account
+when existing infrastructure already exists
+
+Once resources are managed by Terraform, this step is no longer necessary.
+
+Why this script exists
+
+Terraform cannot automatically adopt resources that already exist in AWS.
+
+The bootstrap script ensures Terraform can safely begin managing
+existing infrastructure without requiring engineers to manually run
+terraform import commands.
+
+This helps avoid common onboarding errors and keeps infrastructure
+management consistent across environments.
+
+## What Terraform creates
 
 - Lambda function: `BloodhoundLambdaV2`
 - Lambda Function URL (public, `authorization_type = NONE`)
@@ -122,15 +147,36 @@ terraform_data.build_lambda_pkg
       ↓
 scripts/build_lambda.sh
       ↓
+build mode
+   ├─ Docker build (default)
+   │     ↓
+   │ Docker (AWS Lambda runtime container)
+   │     ↓
+   │ pip install dependencies
+   │
+   └─ Local build (fallback)
+         ↓
+      python3 + pip
+         ↓
+      pip install dependencies
+      ↓
+copy application source
+      ↓
 .build/
-   deps/        cached Python dependencies
-   src/         copied application source
    lambda_pkg/  final Lambda package
       ↓
 archive_file
       ↓
 .build/bloodhound_lambda_v2.zip
 ```
+
+Note:
+The current build system installs dependencies directly into
+`.build/lambda_pkg` instead of using intermediate dependency or
+source directories.
+
+This keeps the packaging process simple and ensures Terraform
+always archives a complete, ready-to-deploy Lambda package.
 
 The build process is triggered only when Terraform detects changes to:
 
@@ -159,17 +205,37 @@ Bloodhound uses a layered build system to improve performance and reliability.
 
 ```text
 .build/
-  deps/        cached dependencies
-  src/         application source
   lambda_pkg/  final deployment package
 ```
 
-This structure provides:
+The Lambda build script installs Python dependencies and copies
+application source code directly into the Lambda package directory.
 
-- faster rebuilds (dependencies are cached)
-- deterministic builds (optional Docker support)
-- safer Terraform execution (prevents empty archive errors)
-- improved CI reliability
+Contents typically include:
+
+- Bloodhound application modules (`bloodhound/`)
+- Lambda handler entrypoints (`handlers/`)
+- Python dependencies installed from `requirements.txt`
+
+Terraform then archives this directory into the deployment artifact:
+
+`.build/bloodhound_lambda_v2.zip`
+
+### Forcing a Lambda Rebuild
+
+Terraform automatically rebuilds the Lambda package when
+application code or `requirements.txt` changes.
+
+If the packaging logic or build script changes, Terraform
+may not detect the modification automatically.
+
+Engineers can force a rebuild using:
+
+```bash
+terraform apply -replace=terraform_data.build_lambda_pkg
+```
+This forces Terraform to rerun the Lambda build pipeline and
+recreate the deployment artifact.
 
 ## Python Version Requirement for Lambda Packaging
 
@@ -184,11 +250,17 @@ Dependency installation is handled by the build script:
 
 `scripts/build_lambda.sh`
 
-By default, dependencies are installed using the local Python environment.
+By default, the Lambda package is built using Docker to ensure
+the dependency environment matches the AWS Lambda runtime.
 
-Optionally, Docker can be used to ensure compatibility with the Lambda runtime:
+Docker builds run inside the official AWS Lambda runtime container:
 
-terraform apply -var="use_docker_build=true"
+public.ecr.aws/lambda/python:3.10
+
+If Docker is unavailable, engineers can temporarily use a local
+Python environment instead:
+
+`terraform apply -var="use_docker_build=false"`
 
 Docker builds use the AWS Lambda runtime container:
 
