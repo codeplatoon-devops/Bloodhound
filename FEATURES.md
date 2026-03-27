@@ -5,6 +5,27 @@ cloud cost monitoring and automated cleanup system.
 
 ---
 
+## Interactive Demo Guide
+
+A step-by-step operational walkthrough of Bloodhound is available in:
+
+docs/quick_demo.md
+
+The demo guide shows how engineers interact with Bloodhound using:
+
+1. Local execution
+2. Slack scan commands
+3. Teardown planning
+4. Controlled teardown execution
+5. Scheduled GitHub Actions scans
+6. Manual GitHub Actions operations
+7. CloudWatch log inspection
+8. Automated teardown validation workflow
+
+The guide includes real screenshots and validation artifacts.
+
+---
+
 ## Core Capabilities
 
 Bloodhound scans AWS infrastructure to identify unused resources

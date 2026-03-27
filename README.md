@@ -47,6 +47,7 @@ This allows every invocation to be traced end-to-end.
 
 - [Stop — Read This Before Running Bloodhound](#️-stop--read-this-before-running-bloodhound)
 - [Documentation](#documentation)
+- [Quick Demo Guide](docs/quick_demo.md)
 - [Requirements](#requirements)
 - [Local Setup and Testing](#local-setup--testing)
 - [Dependency Management](#dependency-management)
