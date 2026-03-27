@@ -1024,9 +1024,11 @@ Example terminal output from the validation workflow:
 
 `./tools/run_validation_workflow.sh`
 
+```md
 ================================================
 Bloodhound Validation Workflow
 ================================================
+```
 
 Step 1: Running Lambda smoke test...
 
@@ -1074,9 +1076,11 @@ SUCCESS: Instance terminated confirmed.
 RESULT: PASS
 Bloodhound successfully deleted the resource.
 
+```md
 ================================================
 Validation workflow completed successfully.
 ================================================
+```
 
 ### Full Validation Log
 
