@@ -76,12 +76,34 @@ def handle_slack_command_http(event: dict[str, Any]) -> dict[str, Any]:
         _invoke_worker(mode="seek", cmd=cmd)
         return _http_text(200, "BloodHound is on the hunt...please stand by.")
 
+    if cmd.command == "/seek_whitelist":
+        _invoke_worker(mode="whitelist", cmd=cmd)
+        return _http_text(200, "Fetching whitelist rules and protected resources...")
+
+    if cmd.command == "/seek_cost":
+        _invoke_worker(mode="seek_cost", cmd=cmd)
+        return _http_text(200, "Pulling cost breakdown and budget summary...")
+
     if cmd.command == "/seek_destroy":
         if not _destroy_allowed(cmd):
             # Slack surfaces non-200 responses as "dispatch_failed", so return 200 with a helpful message.
             return _http_text(200, "Not allowed. Use `/seek_destroy CONFIRM` (and ensure you are allowlisted).")
         _invoke_worker(mode="seek_destroy", cmd=cmd)
         return _http_text(200, "Uh oh someone let the dog out ---> Seek & Destroy Underway friendly assets whitelisted...please stand by.")
+
+    if cmd.command == "/guard":
+        # Local import keeps the cold-start path light and avoids import cycles.
+        from bloodhound.guard import MUTATION_SUBCOMMANDS, parse_command, user_allowed_to_mutate
+
+        sub, _args = parse_command(cmd.text)
+        if sub in MUTATION_SUBCOMMANDS and not user_allowed_to_mutate(cmd.user_id):
+            return _http_text(
+                200,
+                f"`/guard {sub}` is restricted to allowlisted admins "
+                "(set GUARD_ALLOWED_USER_IDS / SLACK_ALLOWED_USER_IDS).",
+            )
+        _invoke_worker(mode="guard", cmd=cmd)
+        return _http_text(200, f"Working the guardrails: `/guard {cmd.text.strip() or 'list'}`...")
 
     # Unknown command (still return 200 so Slack doesn't show dispatch_failed).
     return _http_text(200, f"Unknown command: {cmd.command}")

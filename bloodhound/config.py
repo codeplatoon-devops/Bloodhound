@@ -57,6 +57,24 @@ def _split_csv(raw: Optional[str]) -> list[str]:
     return [x.strip() for x in raw.split(",") if x.strip()]
 
 
+def _parse_tag_rules(raw: Optional[str], legacy_key: str, legacy_value: str) -> list[tuple[str, str]]:
+    rules: list[tuple[str, str]] = []
+    for item in _split_csv(raw):
+        if "=" not in item:
+            continue
+        key, value = item.split("=", 1)
+        key, value = key.strip(), value.strip()
+        if key and value:
+            rules.append((key, value))
+    if not rules:
+        rules.append((legacy_key, legacy_value))
+    return rules
+
+
+def _split_patterns(raw: Optional[str]) -> list[str]:
+    return [x.strip() for x in _split_csv(raw) if x.strip()]
+
+
 @dataclass(frozen=True)
 class SlackConfig:
     bot_token: str
@@ -73,8 +91,8 @@ class RegionConfig:
 
 @dataclass(frozen=True)
 class WhitelistConfig:
-    keep_tag_key: str
-    keep_tag_value: str
+    keep_tag_rules: list[tuple[str, str]]
+    keep_name_patterns: list[str]
     keep_resource_ids: set[str]
 
 
@@ -128,6 +146,13 @@ def load_config() -> AppConfig:
 
     keep_tag_key = _env("KEEP_TAG_KEY", "bloodhound:keep") or "bloodhound:keep"
     keep_tag_value = _env("KEEP_TAG_VALUE", "true") or "true"
+    keep_tag_rules = _parse_tag_rules(_env("KEEP_TAG_RULES"), keep_tag_key, keep_tag_value)
+    keep_name_patterns = _split_patterns(
+        _env(
+            "KEEP_NAME_PATTERNS",
+            "buffalo,fullstack,vetlaunch,dont-touch,do-not-touch,dont_touch",
+        )
+    )
     keep_resource_ids = set(_split_csv(_env("KEEP_RESOURCE_IDS")))
 
     apply_changes = _env_bool("APPLY_CHANGES", False)
@@ -153,8 +178,8 @@ def load_config() -> AppConfig:
         ),
         regions=RegionConfig(mode=region_mode, regions=regions),
         whitelist=WhitelistConfig(
-            keep_tag_key=keep_tag_key,
-            keep_tag_value=keep_tag_value,
+            keep_tag_rules=keep_tag_rules,
+            keep_name_patterns=keep_name_patterns,
             keep_resource_ids=keep_resource_ids,
         ),
         teardown=TeardownConfig(

@@ -16,34 +16,74 @@ from bloodhound.types import ResourceRecord
 def scan_ec2_instances(clients: AwsClients, region: str) -> list[ResourceRecord]:
     ec2 = clients.client("ec2", region=region)
     paginator = ec2.get_paginator("describe_instances")
-    records: list[ResourceRecord] = []
 
+    # First pass: collect live instances and the EBS volume ids attached to each.
+    pending: list[tuple[dict, str, dict[str, str], list[str]]] = []
+    all_vol_ids: set[str] = set()
     for page in paginator.paginate():
         for reservation in page.get("Reservations", []):
             for inst in reservation.get("Instances", []):
                 state = (inst.get("State") or {}).get("Name") or "unknown"
                 if state in {"stopped", "terminated", "shutting-down"}:
                     continue
-                tags = _tags_to_dict(inst.get("Tags"))
                 instance_id = inst.get("InstanceId")
                 if not instance_id:
                     continue
-                records.append(
-                    ResourceRecord(
-                        service="ec2",
-                        resource_type="instance",
-                        region=region,
-                        id=instance_id,
-                        arn=None,
-                        state=state,
-                        tags=tags,
-                        delete_supported=True,
-                        delete_action="terminate_instances",
-                        delete_params={"InstanceIds": [instance_id]},
-                    )
-                )
+                vol_ids = [
+                    (m.get("Ebs") or {}).get("VolumeId")
+                    for m in inst.get("BlockDeviceMappings", []) or []
+                    if (m.get("Ebs") or {}).get("VolumeId")
+                ]
+                all_vol_ids.update(vol_ids)
+                pending.append((inst, instance_id, _tags_to_dict(inst.get("Tags")), vol_ids))
+
+    vol_specs = _describe_volume_specs(ec2, sorted(all_vol_ids))
+
+    records: list[ResourceRecord] = []
+    for inst, instance_id, tags, vol_ids in pending:
+        attached_ebs = [vol_specs[v] for v in vol_ids if v in vol_specs]
+        records.append(
+            ResourceRecord(
+                service="ec2",
+                resource_type="instance",
+                region=region,
+                id=instance_id,
+                arn=None,
+                state=(inst.get("State") or {}).get("Name") or "unknown",
+                tags=tags,
+                metadata={
+                    "instance_type": inst.get("InstanceType"),
+                    "launch_time": (inst.get("LaunchTime").isoformat() if inst.get("LaunchTime") else None),
+                    "attached_ebs": attached_ebs,
+                    "attached_ebs_gb": sum(v["size_gb"] for v in attached_ebs),
+                },
+                delete_supported=True,
+                delete_action="terminate_instances",
+                delete_params={"InstanceIds": [instance_id]},
+            )
+        )
 
     return records
+
+
+def _describe_volume_specs(ec2, vol_ids: list[str]) -> dict[str, dict[str, Any]]:
+    """Map volume id -> {size_gb, volume_type} for attached-EBS cost attribution."""
+    specs: dict[str, dict[str, Any]] = {}
+    if not vol_ids:
+        return specs
+    # Batch to stay well under request-size limits.
+    for i in range(0, len(vol_ids), 200):
+        batch = vol_ids[i : i + 200]
+        try:
+            resp = ec2.describe_volumes(VolumeIds=batch)
+        except Exception:  # noqa: BLE001 — best effort; cost just omits attached EBS
+            continue
+        for vol in resp.get("Volumes", []) or []:
+            vid = vol.get("VolumeId")
+            if not vid:
+                continue
+            specs[vid] = {"size_gb": float(vol.get("Size") or 0), "volume_type": vol.get("VolumeType")}
+    return specs
 
 
 def scan_ebs_unattached_volumes(clients: AwsClients, region: str) -> list[ResourceRecord]:
@@ -71,6 +111,11 @@ def scan_ebs_unattached_volumes(clients: AwsClients, region: str) -> list[Resour
                     arn=None,
                     state=state,
                     tags=tags,
+                    metadata={
+                        "size_gb": vol.get("Size"),
+                        "volume_type": vol.get("VolumeType"),
+                        "created_at": vol.get("CreateTime").isoformat() if vol.get("CreateTime") else None,
+                    },
                     delete_supported=True,
                     delete_action="delete_volume",
                     delete_params={"VolumeId": vol_id},
@@ -109,6 +154,7 @@ def scan_eips_unassociated(clients: AwsClients, region: str) -> list[ResourceRec
                 arn=None,
                 state="unassociated",
                 tags=tags,
+                metadata={"public_ip": public_ip},
                 delete_supported=True,
                 delete_action="release_address",
                 delete_params=delete_params,

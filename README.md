@@ -58,12 +58,17 @@ AWS_PROFILE=geekstar .venv/bin/python tools/run_local.py
 
 ## Whitelisting
 
-Resources tagged with:
+Resources are **kept (whitelisted)** when they match any rule:
 
-- key: `bloodhound:keep`
-- value: `true`
+| Rule type | Env var | Example |
+|---|---|---|
+| Tag | `KEEP_TAG_RULES` | `bloodhound:keep=true` |
+| Name/tag regex | `KEEP_NAME_PATTERNS` | `buffalo,fullstack,vetlaunch,dont-touch` |
+| Explicit ID/ARN | `KEEP_RESOURCE_IDS` | `arn:aws:rds:...:db:vetlaunch-dev-db` |
 
-are treated as **kept (whitelisted)** and are excluded from teardown.
+Legacy single-tag config still works via `KEEP_TAG_KEY` + `KEEP_TAG_VALUE`.
+
+Slack command `/seek_whitelist` posts active whitelist rules plus all currently protected resources.
 
 ---
 
@@ -140,6 +145,8 @@ It invokes:
 Slash commands require a publicly reachable HTTPS endpoint. For v2 we recommend a **Lambda Function URL** (one endpoint) and route based on the Slack `command` field.
 
 - `/seek` runs scan + reports (non-destructive)
+- `/seek_cost` posts AWS MTD cost breakdown + budget summary (non-destructive)
+- `/seek_whitelist` posts whitelist rules + protected resources (non-destructive)
 - `/seek_destroy CONFIRM` runs destructive mode (deletes all non-whitelisted candidates we scan for)
 
 To enable slash commands you must set these env vars in Lambda:

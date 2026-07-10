@@ -39,6 +39,13 @@ def scan_rds_instances(clients: AwsClients, region: str, rds_final_snapshot: boo
                     arn=arn,
                     state=status,
                     tags=tags,
+                    metadata={
+                        "instance_class": db.get("DBInstanceClass"),
+                        "allocated_storage_gb": db.get("AllocatedStorage"),
+                        "engine": db.get("Engine"),
+                        "multi_az": bool(db.get("MultiAZ")),
+                        "created_at": db.get("InstanceCreateTime").isoformat() if db.get("InstanceCreateTime") else None,
+                    },
                     delete_supported=True,
                     delete_action="delete_db_instance",
                     delete_params=delete_params,

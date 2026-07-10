@@ -54,6 +54,11 @@ def scan_elbv2_load_balancers(clients: AwsClients, region: str) -> list[Resource
                 arn=arn,
                 state=state,
                 tags=arn_to_tags.get(arn, {}),
+                metadata={
+                    "scheme": lb.get("Scheme"),
+                    "type": lb.get("Type"),
+                    "created_at": lb.get("CreatedTime").isoformat() if lb.get("CreatedTime") else None,
+                },
                 delete_supported=True,
                 delete_action="delete_load_balancer",
                 delete_params={"LoadBalancerArn": arn},

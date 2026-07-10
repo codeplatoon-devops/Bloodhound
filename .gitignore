@@ -37,6 +37,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Local dry-run reports
+reports/
+
 # Terraform
 **/.terraform/
 **/terraform.tfstate

@@ -25,7 +25,7 @@ resource "aws_iam_role" "lambda_role" {
 }
 
 resource "aws_iam_role_policy_attachment" "basic_logs" {
-  role      = aws_iam_role.lambda_role.name
+  role       = aws_iam_role.lambda_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
@@ -39,6 +39,50 @@ data "aws_iam_policy_document" "bloodhound" {
       "elasticloadbalancing:Describe*",
       "ce:GetCostAndUsage",
       "ssm:GetParameter"
+    ]
+    resources = ["*"]
+  }
+
+  # Spending-controls / guardrails proof (budgets, SCPs, IAM principals).
+  statement {
+    actions = [
+      "sts:GetCallerIdentity",
+      "budgets:DescribeBudgets",
+      "budgets:ViewBudget",
+      "budgets:DescribeBudgetActionsForAccount",
+      "budgets:DescribeBudgetActionsForBudget",
+      "budgets:DescribeBudgetAction",
+      "organizations:DescribePolicy",
+      "organizations:DescribeOrganizationalUnit",
+      "organizations:DescribeAccount",
+      "iam:ListGroups",
+      "iam:ListUsers"
+    ]
+    resources = ["*"]
+  }
+
+  # Cost-guard management ("/guard" command): edit the SCP + the IAM group policy in
+  # sync, and manage group membership. Powerful — paired with Slack allowlist gating
+  # (GUARD_ALLOWED_USER_IDS) and a toggleable-service safelist in the app layer.
+  statement {
+    actions = [
+      "organizations:ListPolicies",
+      "organizations:UpdatePolicy",
+      "organizations:ListTargetsForPolicy",
+      "organizations:AttachPolicy",
+      "organizations:DetachPolicy",
+      "iam:ListPolicies",
+      "iam:GetPolicy",
+      "iam:GetPolicyVersion",
+      "iam:ListPolicyVersions",
+      "iam:CreatePolicyVersion",
+      "iam:DeletePolicyVersion",
+      "iam:ListAttachedGroupPolicies",
+      "iam:AttachGroupPolicy",
+      "iam:DetachGroupPolicy",
+      "iam:GetGroup",
+      "iam:AddUserToGroup",
+      "iam:RemoveUserFromGroup"
     ]
     resources = ["*"]
   }

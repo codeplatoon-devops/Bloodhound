@@ -41,14 +41,9 @@ REGIONS=us-east-1,us-east-2,us-west-1,us-west-2
 
 ### Whitelist
 
-# Tag rules: comma-separated key=value pairs. Any matching tag keeps the resource.
-# Legacy KEEP_TAG_KEY + KEEP_TAG_VALUE are used when KEEP_TAG_RULES is unset.
-KEEP_TAG_RULES=bloodhound:keep=true
+# If a resource has this tag, it will be considered "kept" (whitelisted) and excluded from teardown.
 KEEP_TAG_KEY=bloodhound:keep
 KEEP_TAG_VALUE=true
-
-# Name/tag regex patterns (comma-separated). Matched case-insensitively against Name, id, and tag values.
-KEEP_NAME_PATTERNS=buffalo,fullstack,vetlaunch,dont-touch,do-not-touch,dont_touch
 
 # Optional: always keep these IDs/ARNs (comma-separated)
 KEEP_RESOURCE_IDS=
@@ -70,9 +65,6 @@ TEARDOWN_ALLOW_ALL=false
 # For RDS deletions: if false, skip final snapshot (fast/cheap).
 RDS_FINAL_SNAPSHOT=false
 
-# Optional: lookup CloudTrail creator per resource (best-effort; requires CloudTrail)
-ATTRIBUTION_ENABLED=true
-
 ### Budget (dynamic cohort)
 
 COHORT_START_YYYY_MM=2025-12
@@ -80,9 +72,4 @@ COHORT_TOTAL_BUDGET_USD=3000
 COHORT_LENGTH_MONTHS=7
 BUDGET_OVER_DAYS=2
 
-### Local dry-run output
 
-# Print reports to stdout and write a file under reports/
-BLOODHOUND_PRINT_REPORTS=true
-BLOODHOUND_REPORT_FORMAT=markdown
-BLOODHOUND_REPORT_DIR=reports

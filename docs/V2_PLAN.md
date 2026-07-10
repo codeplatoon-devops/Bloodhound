@@ -246,6 +246,22 @@ Defaults (as implemented)
 - ~~`/seek_destroy CONFIRM` (destructive, guarded)~~
 - ~~Optional allowlists for destroy (user/channel IDs)~~
 
+### v2.7 (guardrail management — `/guard`)
+
+Bloodhound owns the cost guards instead of CLI scripts. A *guardrail* spans two layers
+edited in sync: the org **SCP** (member accounts) and the **IAM group policy** (IAM-user
+students in the mgmt account) — so they can never drift (the drift once left RDS blocked
+for students after the SCP was loosened).
+
+- ~~`/guard list` / `show <name>` / `members <name>` (read)~~
+- ~~`/guard allow|deny <name> <service>` — edits BOTH layers, toggleable-service safelist~~
+- ~~`/guard enable|disable <name>` — attach/detach the IAM policy to its group~~
+- ~~`/guard add-student|remove-student <name> <user>`~~
+- ~~Mutation gate: GUARD_ALLOWED_USER_IDS (falls back to SLACK_ALLOWED_USER_IDS)~~
+- ~~Additive IAM perms for the Lambda role (org UpdatePolicy/Attach, iam policy-version + group mgmt)~~
+
+Phase 2 (next): 2-3 tiers (Core Lab / Extended / Locked) via the `tier` field + GUARD_REGISTRY.
+
 ---
 
 ## 8) Open questions / next improvements (optional)
