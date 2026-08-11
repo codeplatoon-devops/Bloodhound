@@ -1,0 +1,304 @@
+# Safe Operations Guide (Bloodhound V2)
+
+⚠️  Bloodhound must always run in dry-run mode unless explicitly validating teardown logic.
+
+## Table of Contents
+
+- [Core Safety Principles](#core-safety-principles)
+- [Default Safety Configuration](#default-safety-configuration)
+- [Safe Validation Procedure](#safe-validation-procedure)
+- [Controlled Deletion Procedure](#controlled-deletion-procedure)
+- [Full Cleanup](#full-cleanup-use-extreme-caution)
+- [Terraform Safety Guard](#terraform-safety-guard)
+- [Lambda Version Rollback](#lambda-version-rollback)
+- [Emergency Stop](#emergency-stop)
+- [Summary](#summary)
+
+This document describes the operational safeguards built into Bloodhound V2 and the procedures engineers must follow before enabling destructive actions.
+
+Bloodhound is capable of identifying and deleting unused cloud infrastructure. Because of this capability, strict safeguards are enforced to prevent accidental resource deletion.
+
+---
+
+# Core Safety Principles
+
+Bloodhound follows a layered safety model:
+
+```text
+Detection
+   ↓
+Planning
+   ↓
+Dry-run validation
+   ↓
+Execution Path
+   ├─ Operator confirmation (Slack command)
+   └─ Validation harness (automated testing)
+   ↓
+Deletion
+```
+
+Deletion should **never be enabled without first reviewing the dry-run plan.**
+
+---
+
+# Default Safety Configuration
+
+The system ships in **safe mode** by default.
+
+These environment variables enforce non-destructive behavior:
+
+```
+APPLY_CHANGES=false
+TEARDOWN_SIMULATE=true
+TEARDOWN_ALLOW_ALL=false
+```
+
+This configuration ensures:
+
+* Infrastructure scans run normally
+* Teardown plans are generated
+* No resources are deleted
+
+Slack will show a **Teardown Plan (dry-run)** message but no destructive actions will execute.
+
+---
+
+# Safe Validation Procedure
+
+Before enabling deletion, the following validation process must be completed.
+
+## Step 1 — Run Scan
+
+In Slack:
+
+```
+/v2_seek
+```
+
+Confirm that the system reports:
+
+* scan summary
+* budget summary
+* teardown plan
+
+---
+
+## Step 2 — Review Teardown Plan
+
+Carefully review the Slack message:
+
+```
+Bloodhound v2 — Teardown Plan (dry-run)
+```
+
+Verify:
+
+* resources are expected candidates
+* no production resources appear
+* whitelisted resources are excluded
+
+Example:
+
+```
+simulate: true
+planned_actions: 36
+```
+
+---
+
+## Step 3 — Confirm Whitelisted Resources
+
+Resources that should never be deleted must have the tag:
+
+```
+bloodhound:keep=true
+```
+
+Bloodhound will list these in Slack under:
+
+```
+Whitelisted Resources (Kept)
+```
+
+If a resource should be protected but does not appear here, add the tag before proceeding.
+
+---
+
+# Controlled Deletion Procedure
+
+Deletion should only occur after the dry-run plan has been reviewed.
+
+## Enable Deletion Mode
+
+Update environment configuration:
+
+```
+APPLY_CHANGES=true
+TEARDOWN_SIMULATE=false
+```
+
+Keep this safeguard enabled unless a full cleanup is intended:
+
+```
+TEARDOWN_ALLOW_ALL=false
+```
+
+This forces operators to explicitly specify targets.
+
+---
+
+## Targeted Deletion (Recommended)
+
+Specify the exact resources to delete:
+
+```
+TEARDOWN_TARGET_IDS=<comma separated resource IDs>
+```
+
+Example:
+
+```
+TEARDOWN_TARGET_IDS=i-0123456789abcdef
+```
+
+Then execute one of the following:
+
+Operator-triggered deletion (Slack command path):
+
+/v2_seek_destroy CONFIRM
+
+or automated validation execution:
+
+validation harness → Lambda validation event invocation
+
+```json
+(source: "validation")
+```
+
+Validation events are routed through the Lambda event router
+and handled by the validation execution path.
+
+---
+
+# Full Cleanup (Use Extreme Caution)
+
+Only enable full cleanup when the environment is confirmed safe.
+
+Required configuration:
+
+```
+APPLY_CHANGES=true
+TEARDOWN_SIMULATE=false
+TEARDOWN_ALLOW_ALL=true
+```
+
+Then run:
+
+```
+/v2_seek_destroy CONFIRM
+```
+
+Bloodhound will execute the teardown plan.
+
+---
+
+# Terraform Safety Guard
+
+Terraform includes an account safety guard to prevent deploying Bloodhound to the wrong AWS account.
+
+Variable:
+
+```
+expected_aws_account_id
+```
+
+Terraform validates:
+
+```
+current AWS account ID
+    ==
+expected account ID
+```
+
+If the IDs do not match, the deployment fails.
+
+This prevents accidental deployments to production or unrelated accounts.
+
+---
+
+# Lambda Version Rollback
+
+Bloodhound uses Lambda versioning with a `prod` alias.
+
+Every deployment publishes a new immutable version:
+
+```
+BloodhoundLambdaV2
+   ├ Version 1
+   ├ Version 2
+   └ Version 3
+        ↑
+       prod
+```
+
+If a deployment introduces a problem, the alias can be moved to a previous version.
+
+Rollback procedure:
+
+1. Open AWS Console
+2. Navigate to Lambda → BloodhoundLambdaV2
+3. Open **Aliases**
+4. Edit **prod**
+5. Select the previous working version
+
+Slack integration will continue working because the Function URL always invokes the alias.
+
+---
+
+# Emergency Stop
+
+If unexpected behavior occurs:
+
+1. Set:
+
+```
+APPLY_CHANGES=false
+TEARDOWN_SIMULATE=true
+```
+
+2. Redeploy or update Lambda environment variables.
+
+This immediately disables destructive actions.
+
+---
+
+# Lambda Execution Logging
+
+All Bloodhound Lambda executions emit structured log markers:
+
+[BLOODHOUND][EVENT_TYPE][request_id=...]
+
+Examples:
+
+[BLOODHOUND][SCAN][request_id=...]
+[BLOODHOUND][SCHEDULED][request_id=...]
+[BLOODHOUND][VALIDATION][request_id=...]
+
+The request_id corresponds to the AWS Lambda invocation ID
+(context.aws_request_id) and allows engineers to trace
+individual executions through CloudWatch logs.
+
+---
+
+# Summary
+
+Bloodhound V2 implements multiple safety layers:
+
+* dry-run mode enabled by default
+* explicit confirmation required
+* whitelist protection via resource tags
+* Terraform account guard
+* Lambda version rollback capability
+
+Operators must always review teardown plans before enabling deletion.

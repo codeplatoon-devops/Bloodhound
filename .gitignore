@@ -1,0 +1,98 @@
+# =========================================================
+# Python
+# =========================================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# =========================================================
+# Virtual Environments
+# =========================================================
+.venv/
+venv/
+ENV/
+myenv/
+
+# =========================================================
+# Environment Files / Secrets
+# =========================================================
+.env
+.env.*
+**/.env
+**/.env.*
+
+# =========================================================
+# Project Build Artifacts
+# =========================================================
+.build/
+**/.build/
+*.zip
+
+# =========================================================
+# Logs
+# =========================================================
+*.log
+
+# =========================================================
+# OS / Editor Files
+# =========================================================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# Local dry-run reports
+reports/
+
+# =========================================================
+# Terraform
+# =========================================================
+.terraform/
+**/.terraform/
+infra/terraform.tfvars
+
+# Terraform state files (NEVER commit)
+*.tfstate
+*.tfstate.*
+
+# Terraform variable overrides (often contain secrets)
+*.tfvars
+*.tfvars.json
+
+# Terraform crash logs
+crash.log
+
+# Terraform CLI config files
+.terraformrc
+terraform.rc
+
+# =========================================================
+# GitHub Actions (temporarily disabled for safety)
+# =========================================================
+#/.github/workflows/
+
+# Lambda local test output
+output.txt
+
+# Ignore Validation logs (these can be large and are not needed in version control)
+logs/validation/*.log
+
+# However, we want to keep the validation history log, which tracks past validation runs and their results.
+!logs/validation_history.log
+
+# Bootstrap script artifacts
+trust-policy.json
+lambda-policy.json

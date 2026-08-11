@@ -1,0 +1,59 @@
+# Example Terraform inputs for Bloodhound v2.
+#
+# Copy to terraform.tfvars (do not commit terraform.tfvars; it's gitignored).
+#
+# NOTE: Any values you put in lambda_env will end up in Terraform state.
+# Avoid putting Slack tokens or secrets here. Prefer setting secrets in the Lambda console
+# or via your preferred secret management approach.
+
+aws_region  = "us-west-2"
+
+# Optional: AWS CLI profile Terraform should use when authenticating.
+# If omitted, Terraform will use the default AWS credential chain
+# (environment variables, SSO session, or the default profile).
+#aws_profile = ""
+
+name_prefix          = "bloodhound-v2"
+lambda_function_name = "BloodhoundLambdaV2"
+lambda_runtime       = "python3.10"
+
+# Safety guard: Terraform will refuse to deploy if the active AWS
+# credentials belong to a different account than this ID.
+expected_aws_account_id = "123456789012"
+
+# Non-secret env vars can live here safely.
+lambda_env = {
+  SLACK_ENABLED           = "true"
+  # Secrets (OK to set here if you accept they will be stored in Terraform state)
+  SLACK_BOT_TOKEN         = "REPLACE_ME"
+  SLACK_SIGNING_SECRET    = "REPLACE_ME"
+
+  SLACK_SCAN_CHANNEL_ID   = "C0A4YLV0HNY"
+  SLACK_ALERT_CHANNEL_ID  = "C0A4YLV0HNY"
+  REGION_MODE             = "explicit"
+  REGIONS                 = "us-east-1,us-east-2,us-west-1,us-west-2"
+  KEEP_TAG_KEY            = "bloodhound:keep"
+  KEEP_TAG_VALUE          = "true"
+  COHORT_START_YYYY_MM    = "2025-12"
+  COHORT_TOTAL_BUDGET_USD = "3000"
+  COHORT_LENGTH_MONTHS    = "7"
+  BUDGET_OVER_DAYS        = "2"
+
+  # Slash commands (non-secret)
+  SLACK_DESTROY_CONFIRM_TOKEN = "CONFIRM"
+
+  # Optional allowlists (comma-separated)
+  SLACK_ALLOWED_USER_IDS    = ""
+  SLACK_ALLOWED_CHANNEL_IDS = ""
+
+  # Teardown controls
+  APPLY_CHANGES      = "false"
+  TEARDOWN_SIMULATE  = "true"
+  TEARDOWN_TARGET_IDS = ""
+  TEARDOWN_ALLOW_ALL = "false"
+  RDS_FINAL_SNAPSHOT = "false"
+
+  TEARDOWN_MAX_DELETE_COUNT = "5"
+}
+
+

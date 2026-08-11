@@ -1,0 +1,298 @@
+# Bloodhound v2 Configuration Guide
+
+## Table of Contents
+
+- [Configuration Sources](#configuration-sources)
+- [Teardown Mode Configuration](#teardown-mode-configuration)
+- [Deletion Safety Limit](#deletion-safety-limit)
+- [AWS Account Safety Guard](#aws-account-safety-guard)
+- [Terraform Deployment Safety](#terraform-deployment-safety)
+- [Bloodhound Safety Architecture](#bloodhound-safety-architecture)
+- [Teardown Execution Flow](#teardown-execution-flow)
+- [Related Documentation](#related-documentation)
+
+This document describes the configuration system used by **Bloodhound v2**, including environment variables, teardown behavior, and operational safety controls.
+
+Configuration is primarily provided through environment variables.
+
+For local development, variables are defined in:
+
+```
+.env
+```
+
+For AWS deployment, variables are configured in the Lambda **Environment Variables** section.
+
+An example configuration template is provided in:
+
+```
+env.example
+```
+
+---
+
+# Configuration Sources
+
+Bloodhound loads configuration from the following sources:
+
+| Source                       | Purpose                            |
+| ---------------------------- | ---------------------------------- |
+| `.env`                       | Local development configuration    |
+| `env.example`                | Template for creating `.env`       |
+| Lambda environment variables | Production configuration           |
+| Terraform variables          | Infrastructure-level configuration |
+
+---
+
+# Teardown Mode Configuration
+
+Bloodhound supports both **safe planning mode** and **real deletion mode**.
+
+Two environment variables control how teardown operations behave:
+
+```
+APPLY_CHANGES
+TEARDOWN_SIMULATE
+```
+
+These variables must follow specific combinations.
+
+| APPLY_CHANGES | TEARDOWN_SIMULATE | Meaning                               |
+| ------------- | ----------------- | ------------------------------------- |
+| false         | true              | Safe dry-run mode (default operation) |
+| true          | false             | Real deletion mode                    |
+| false         | false             | Allowed but uncommon configuration (builds a plan but performs no deletion) |
+| true          | true              | ❌ Invalid configuration               |
+
+If both values are set to `true`, the configuration becomes contradictory.
+
+Example:
+
+```
+APPLY_CHANGES=true
+TEARDOWN_SIMULATE=true
+```
+
+This would instruct Bloodhound to:
+
+* perform destructive actions
+* simulate destructive actions
+
+This configuration is invalid.
+
+The validation scripts will refuse to run if this state is detected.
+
+---
+
+# Deletion Safety Limit
+
+Bloodhound includes a safety rail that limits how many resources may be deleted in a single run.
+
+Environment variable:
+
+```
+TEARDOWN_MAX_DELETE_COUNT
+```
+
+Example:
+
+```
+TEARDOWN_MAX_DELETE_COUNT=5
+```
+
+If a teardown plan contains more resources than this limit, execution will stop.
+
+This protects against:
+
+* scanning bugs
+* AWS API anomalies
+* incorrect filtering logic
+* accidental large-scale deletion events
+
+---
+
+# AWS Account Safety Guard
+
+Validation scripts include a safety guard that verifies the AWS account ID before executing destructive tests.
+
+Environment variable:
+
+```
+EXPECTED_AWS_ACCOUNT_ID
+```
+
+Example:
+
+```
+EXPECTED_AWS_ACCOUNT_ID=123456789012
+```
+
+When validation scripts run, they compare the current AWS credentials against this value.
+
+If the account does not match, execution stops.
+
+This prevents validation scripts from running against the wrong AWS account.
+
+---
+
+# Terraform Deployment Safety
+
+Terraform includes an additional safety guard that prevents deployments when destructive mode is enabled.
+
+Variable:
+
+```
+allow_apply_mode
+```
+
+Bloodhound can delete resources when:
+
+```
+APPLY_CHANGES=true
+```
+
+However Terraform will refuse deployment unless the engineer explicitly confirms the action.
+
+Example deployment command:
+
+```
+terraform apply -var allow_apply_mode=true
+```
+
+This prevents accidental enabling of destructive mode.
+
+---
+
+# Bloodhound Safety Architecture
+
+## Execution Path Safety (Important)
+
+Bloodhound separates execution paths based on invocation type to ensure
+safe and deterministic behavior.
+
+- Slack commands may use async self-invocation to return immediately
+- Scheduled executions run synchronously through a dedicated path
+- Validation harness invocations execute through a dedicated validation handler
+- Manual operations (scan/status) execute through the main pipeline
+
+Scheduled events do NOT pass through the generic `run()` function.
+
+Instead they follow the dedicated execution path:
+
+scheduled_handler → run_scheduled_scan() → execute_pipeline()
+
+Scheduled events may originate from:
+
+- EventBridge (production scheduler)  
+- GitHub Actions scheduler validation workflows (`validate_scheduler` mode)
+
+This separation prevents recursive execution and ensures that scheduled
+runs cannot re-enter the Lambda routing layer.
+
+Bloodhound includes multiple independent safety mechanisms designed to prevent accidental infrastructure deletion.
+
+These controls operate at different layers of the system.
+
+| Safety Layer                     | Purpose                                                    |
+| -------------------------------- | ---------------------------------------------------------- |
+| Slack confirmation token         | prevents accidental teardown commands                      |
+| validation harness isolation     | restricts automated destructive tests to validation runs   |
+| max deletion count               | prevents mass deletion events                              |
+| Terraform apply guard            | prevents destructive deployment configuration              |
+| Terraform account guard          | prevents deploying infrastructure in the wrong AWS account |
+| validation script account guard  | prevents running validation tests in the wrong AWS account |
+| config consistency guard         | prevents invalid teardown configuration                    |
+
+These protections are intentionally redundant to provide multiple layers of safety.
+
+If one safety mechanism fails or is bypassed, others remain in place.
+
+This **defense-in-depth model** is common in internal cloud automation systems.
+
+---
+
+# Lambda Logging and Traceability
+
+Bloodhound emits standardized CloudWatch log markers for all Lambda
+invocations.
+
+Each invocation includes a structured log header:
+
+[BLOODHOUND][EVENT_TYPE][request_id=...]
+
+Examples:
+
+[BLOODHOUND][SCHEDULED][request_id=abc123]  
+[BLOODHOUND][SCAN][request_id=xyz456]  
+[BLOODHOUND][STATUS][request_id=def789]
+
+Including the Lambda `request_id` (from `context.aws_request_id`)
+allows engineers to trace individual executions through CloudWatch
+logs and quickly identify the event type being processed.
+
+This logging format significantly improves operational debugging and
+scheduler validation.
+
+---
+
+# Teardown Execution Flow
+
+The teardown process follows this sequence of safety checks.
+
+```text
+Engineer / Validation Harness
+        │
+        ▼
+Lambda Invocation
+   ├─ Slack Command (/v2_seek_destroy CONFIRM)
+   └─ Validation Harness Invocation
+        │
+        ▼
+Lambda Router
+        │
+        ▼
+Teardown Execution Path
+        │
+        ▼
+Slack Confirmation Guard
+        │
+        ▼
+Configuration Consistency Guard
+        │
+        ▼
+Deletion Limit Guard
+        │
+        ▼
+AWS API Delete Calls
+        │
+        ▼
+CloudWatch Logging
+```
+
+Each stage ensures that destructive operations occur only when explicitly intended.
+
+---
+
+# Related Documentation
+
+Detailed validation procedures are documented in the following guides.
+
+Slack command validation:
+
+```
+docs/slack_and_lambda_validation.md
+```
+
+Teardown validation workflow:
+
+```
+docs/validate_teardown.md
+```
+
+System architecture overview:
+
+```
+docs/bloodhound_v2_plan.md
+```
+
+---
