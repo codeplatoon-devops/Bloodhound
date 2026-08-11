@@ -1,28 +1,253 @@
 name: Invoke Bloodhound Lambda
+run-name: Bloodhound Operations — ${{ github.event.inputs.mode }}
+
+# ------------------------------------------------------------
+# GitHub Actions workflow for invoking the Bloodhound Lambda.
+#
+# This workflow runs ONLY as a scheduled scanner.
+#
+# The purpose of this workflow is to execute the automated
+# Bloodhound infrastructure scan on a fixed schedule.
+#
+# Manual operations (scan / validation / status) are handled
+# by a separate workflow: bloodhound_ops.yml
+#
+# Lambda behavior is determined by:
+#   event["source"]
+#
+# Example payload used here:
+#   { "source": "scheduled" }
+
+# ------------------------------------------------------------
+
+permissions:
+  id-token: write
+  contents: read
+
+# Prevent multiple scans running at the same time
+concurrency:
+  group: bloodhound-scan
+  cancel-in-progress: false
 
 on:
+
+  # ----------------------------------------------------------
+  # Scheduled runs (UTC)
+  #
+  # NOTE:
+  # GitHub cron jobs only run from the repository DEFAULT
+  # branch (usually "main"). If this workflow exists only
+  # in another branch, the schedule will NOT trigger.
+  #
+  # Bloodhound executes twice per day:
+  #
+  # 16:00 UTC → 11 AM EST
+  # 04:00 UTC → 11 PM EST
+  # ----------------------------------------------------------
   schedule:
-    # Run at 11 AM and 11 PM EST (4 PM and 4 AM UTC)
     - cron: '0 16,4 * * *'
-  workflow_dispatch:
 
 jobs:
+
+  # GitHub runner job that invokes the Lambda
   invoke-lambda:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
 
-    - name: Set up AWS CLI
-      uses: aws-actions/configure-aws-credentials@v1
+    # Temporary debug step to see what GitHub sends in the OIDC token context
+    - name: Print GitHub OIDC context
+      run: |
+        echo "Repository: $GITHUB_REPOSITORY"
+        echo "Ref: $GITHUB_REF"
+        echo "Ref Name: $GITHUB_REF_NAME"
+        echo "Event: $GITHUB_EVENT_NAME"
+
+    # Pull repository contents
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # Configure AWS credentials via GitHub OIDC
+    - name: Configure AWS credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v5
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        role-to-assume: arn:aws:iam::388691194728:role/BloodhoundGitHubInvokeRole
         aws-region: us-west-2
 
+    # Invoke Bloodhound Lambda
     - name: Invoke Bloodhound Lambda function
       run: |
-        echo '{}' > test_event.json
-        aws lambda invoke --function-name BloodhoundLambda --payload file://test_event.json output.txt --region us-west-2
-        cat output.txt
+
+        set -euo pipefail  # fail fast: exit on errors, undefined vars, or pipeline failures
+
+        # -------------------------------------------------------
+        # Group: Invocation Setup
+        # -------------------------------------------------------
+        echo "::group::Bloodhound Lambda Invocation"
+
+        echo "Building Lambda event payload"
+
+        # -------------------------------------------------------
+        # Build Lambda event payload
+        #
+        # This workflow always runs as part of the scheduled
+        # infrastructure scan.
+        #
+        # Because manual execution has been moved to a separate
+        # workflow (bloodhound_ops.yml), we no longer need to
+        # inspect GitHub workflow inputs.
+        #
+        # The Lambda event payload is therefore deterministic:
+        #
+        #   { "source": "scheduled" }
+        #
+        # This ensures the Lambda pipeline runs in automated
+        # scan mode every time the cron job executes.
+        # -------------------------------------------------------
+
+        echo '{"source":"scheduled"}' > event.json
+        cat event.json
+
+        echo ""
+        echo "Invoking Bloodhound Lambda"
+
+        # Invoke Lambda
+        # output.json      -> Lambda response payload
+        # lambda_meta.json -> AWS CLI invocation metadata
+        aws lambda invoke \
+          --function-name BloodhoundLambdaV2 \
+          --cli-binary-format raw-in-base64-out \
+          --payload file://event.json \
+          --log-type Tail \
+          output.json \
+          --region us-west-2 \
+          > lambda_meta.json
+
+        echo "::endgroup::"
+
+
+        # -------------------------------------------------------
+        # Group: Lambda Response
+        # -------------------------------------------------------
+        echo "::group::Lambda Response Payload"
+        cat output.json
+        echo "::endgroup::"
+
+
+        # -------------------------------------------------------
+        # Group: Bloodhound Summary
+        #
+        # This prints a concise operational summary extracted
+        # from the Lambda response so CI logs clearly show what
+        # Bloodhound discovered during the scan.
+        #
+        # These values come directly from the structured response
+        # returned by the Bloodhound pipeline.
+        #
+        # Sections displayed:
+        #   • scan      → resource discovery summary
+        #   • budget    → cost projection snapshot
+        #   • teardown  → planned/allowed cleanup actions
+        #
+        # This improves observability without failing the CI job.
+        # -------------------------------------------------------
+        echo "::group::Bloodhound Summary"
+
+        echo "Scan Summary:"
+        jq '.scan' output.json
+
+        echo ""
+        echo "Budget Snapshot:"
+        jq '.budget' output.json
+
+        echo ""
+        echo "Teardown Plan:"
+        jq '.teardown' output.json
+
+        echo "::endgroup::"
+
+
+        # -------------------------------------------------------
+        # Group: Invocation Metadata
+        # -------------------------------------------------------
+        echo "::group::Lambda Invocation Metadata"
+        cat lambda_meta.json
+        echo "::endgroup::"
+
+
+        # -------------------------------------------------------
+        # Group: Decoded Lambda Logs
+        #
+        # When --log-type Tail is used, AWS embeds the last 4 KB
+        # of Lambda logs inside the LogResult field of the invoke
+        # response. The logs are base64 encoded.
+        #
+        # This step decodes them so they appear directly in the
+        # GitHub Actions output for easier debugging.
+        # -------------------------------------------------------
+        echo "::group::Decoded Lambda Logs"
+
+        if jq -e '.LogResult' lambda_meta.json > /dev/null; then
+          cat lambda_meta.json | jq -r '.LogResult' | base64 -d
+        else
+          echo "No embedded logs returned from Lambda."
+        fi
+
+        echo "::endgroup::"
+
+
+        # -------------------------------------------------------
+        # Group: Lambda Failure Detection
+        #
+        # Prevents CI pipelines from silently succeeding if
+        # Lambda execution fails.
+        # -------------------------------------------------------
+        echo "::group::Lambda Error Check"
+
+        # Detect runtime Lambda errors
+        if grep -q "FunctionError" lambda_meta.json; then
+          echo "ERROR: Lambda reported FunctionError"
+          exit 1
+        fi
+
+        # Detect unexpected status codes
+        if ! grep -q '"StatusCode": 200' lambda_meta.json; then
+          echo "ERROR: Lambda invocation returned non-200 status"
+          exit 1
+        fi
+
+        echo "Lambda invocation completed successfully"
+        echo "===== Invocation Complete ====="
+
+        echo "::endgroup::"
+
+    - name: Fetch Lambda Logs
+      run: |
+
+        echo "::group::Lambda CloudWatch Logs"
+
+        LOG_GROUP="/aws/lambda/BloodhoundLambdaV2"
+
+        # Find latest log stream
+        LOG_STREAM=$(aws logs describe-log-streams \
+          --log-group-name $LOG_GROUP \
+          --order-by LastEventTime \
+          --descending \
+          --limit 1 \
+          --query 'logStreams[0].logStreamName' \
+          --output text)
+
+        echo "Latest log stream:"
+        echo $LOG_STREAM
+
+        echo ""
+        echo "Recent log events:"
+
+        aws logs get-log-events \
+          --log-group-name $LOG_GROUP \
+          --log-stream-name $LOG_STREAM \
+          --limit 50 \
+          --query 'events[*].message' \
+          --output text
+
+        echo "::endgroup::"

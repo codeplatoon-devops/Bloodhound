@@ -1,0 +1,657 @@
+# Bloodhound v2 Infrastructure (Terraform)
+
+## Table of Contents
+
+- [First-Time Terraform Setup](#first-time-terraform-setup)
+- [What Terraform Creates](#what-terraform-creates)
+- [Deploy Flow](#deploy-flow)
+- [Python Version Requirement for Lambda Packaging](#python-version-requirement-for-lambda-packaging)
+- [AWS Region Alignment](#aws-region-alignment)
+- [Environment Variables and Secrets](#environment-variables-and-secrets)
+- [Lambda Versioning and Alias](#lambda-versioning-and-alias)
+- [Performing a Rollback](#performing-a-rollback)
+- [Permanent Rollback Using Terraform](#permanent-rollback-using-terraform)
+- [Destructive Mode Deployment Guard](#destructive-mode-deployment-guard)
+
+This directory provisions the AWS infrastructure for running Bloodhound v2 with Slack slash commands.
+
+We use a **Lambda Function URL** (single endpoint) for `/v2_seek` and `/v2_seek_destroy`.
+
+## First-Time Terraform Setup (Existing AWS Resources)
+
+If the IAM role or IAM policy already exist in the AWS account,
+Terraform must import them into state before the first `terraform apply`.
+
+This situation commonly occurs when:
+
+- Bloodhound resources were created manually
+- The project was previously deployed outside Terraform
+- The AWS account already contains earlier Bloodhound infrastructure
+
+To prevent Terraform errors such as:
+
+EntityAlreadyExists: Role with name bloodhound-v2-role already exists
+
+this repository includes a helper script that automatically imports
+existing resources into Terraform state if they are detected.
+
+### Run the bootstrap helper
+
+From the `infra/` directory:
+
+```bash
+./bootstrap_imports.sh
+```
+
+The script will:
+
+Detect if the IAM role bloodhound-v2-role exists
+Detect if the IAM policy bloodhound-v2-policy exists
+Import them into Terraform state if necessary
+
+After running the script, proceed normally:
+
+terraform init
+terraform apply
+When this step is required
+
+You typically only need to run the bootstrap script:
+
+the first time Terraform is introduced into an AWS account
+when existing infrastructure already exists
+
+Once resources are managed by Terraform, this step is no longer necessary.
+
+Why this script exists
+
+Terraform cannot automatically adopt resources that already exist in AWS.
+
+The bootstrap script ensures Terraform can safely begin managing
+existing infrastructure without requiring engineers to manually run
+terraform import commands.
+
+This helps avoid common onboarding errors and keeps infrastructure
+management consistent across environments.
+
+## What Terraform creates
+
+- Lambda function: `BloodhoundLambdaV2`
+- Lambda Function URL (public, `authorization_type = NONE`)
+- IAM role + policies for:
+  - CloudWatch logs
+  - scanning resources (EC2/RDS/ELBv2)
+  - cost explorer (CE)
+  - teardown actions (terminate/delete)
+  - async self-invocation (so slash commands can return immediately)
+
+  ### Execution Model Notes
+
+Bloodhound uses different execution paths depending on invocation type:
+
+All events first pass through the Lambda event router, which determines
+the correct execution path.
+
+- Slack commands may use async self-invocation so responses return immediately
+- Scheduled scans run synchronously through a dedicated execution path
+- Manual operations execute through the main pipeline
+
+Important:
+
+Scheduled events do NOT use async self-invocation and must not pass through
+the generic `run()` function.
+
+They are routed through a dedicated scheduled execution handler.
+
+They follow:
+
+scheduled_handler → run_scheduled_scan() → execute_pipeline()
+
+This separation prevents recursive execution loops.
+
+### Lambda Execution Logging
+
+Bloodhound Lambda executions emit structured log markers to make
+CloudWatch debugging easier.
+
+Format:
+
+[BLOODHOUND][EVENT_TYPE][request_id=...]
+
+Examples:
+
+[BLOODHOUND][SLACK][request_id=...]
+[BLOODHOUND][SCHEDULED][request_id=...]
+[BLOODHOUND][VALIDATION][request_id=...]
+
+The `request_id` corresponds to the AWS Lambda invocation ID
+(`context.aws_request_id`) and allows engineers to trace
+individual executions across CloudWatch logs.
+
+### Deploy flow
+
+1. Apply Terraform (from `Bloodhound/infra/`):
+
+```bash
+terraform init
+terraform apply
+```
+
+Terraform automatically builds the Lambda deployment package during `terraform apply`.
+
+Packaging flow:
+
+```text
+terraform apply
+      ↓
+terraform_data.build_lambda_pkg
+      ↓
+scripts/build_lambda.sh
+      ↓
+build mode
+   ├─ Docker build (default)
+   │     ↓
+   │ Docker (AWS Lambda runtime container)
+   │     ↓
+   │ pip install dependencies
+   │
+   └─ Local build (fallback)
+         ↓
+      python3 + pip
+         ↓
+      pip install dependencies
+      ↓
+copy application source
+      ↓
+.build/
+   lambda_pkg/  final Lambda package
+      ↓
+archive_file
+      ↓
+.build/bloodhound_lambda_v2.zip
+```
+
+Note:
+The current build system installs dependencies directly into
+`.build/lambda_pkg` instead of using intermediate dependency or
+source directories.
+
+This keeps the packaging process simple and ensures Terraform
+always archives a complete, ready-to-deploy Lambda package.
+
+The build process is triggered only when Terraform detects changes to:
+
+- application source code (bloodhound/, handlers/)
+- requirements.txt
+
+This ensures fast incremental builds while avoiding unnecessary dependency installation.
+
+### ⚠️ Important
+
+Engineers modifying the Lambda build process should review:
+
+docs/lambda_packaging.md
+
+before making changes to avoid breaking Terraform packaging or deployment.
+
+2. Configure Slack slash commands
+
+In your Slack App settings, set the Request URL for `v2_seek` and `/v2_seek_destroy` to the Terraform output:
+
+- `lambda_function_url`
+
+### Lambda Build System Overview
+
+Bloodhound uses a layered build system to improve performance and reliability.
+
+```text
+.build/
+  lambda_pkg/  final deployment package
+```
+
+The Lambda build script installs Python dependencies and copies
+application source code directly into the Lambda package directory.
+
+Contents typically include:
+
+- Bloodhound application modules (`bloodhound/`)
+- Lambda handler entrypoints (`handlers/`)
+- Python dependencies installed from `requirements.txt`
+
+Terraform then archives this directory into the deployment artifact:
+
+`.build/bloodhound_lambda_v2.zip`
+
+### Forcing a Lambda Rebuild
+
+Terraform automatically rebuilds the Lambda package when
+application code or `requirements.txt` changes.
+
+If the packaging logic or build script changes, Terraform
+may not detect the modification automatically.
+
+Engineers can force a rebuild using:
+
+```bash
+terraform apply -replace=terraform_data.build_lambda_pkg
+```
+This forces Terraform to rerun the Lambda build pipeline and
+recreate the deployment artifact.
+
+## Python Version Requirement for Lambda Packaging
+
+The Lambda runtime for Bloodhound v2 is currently:
+
+`python3.10`
+
+During deployment, Terraform builds the Lambda package locally using pip before uploading it to AWS.
+
+
+Dependency installation is handled by the build script:
+
+`scripts/build_lambda.sh`
+
+By default, the Lambda package is built using Docker to ensure
+the dependency environment matches the AWS Lambda runtime.
+
+Docker builds run inside the official AWS Lambda runtime container:
+
+public.ecr.aws/lambda/python:3.10
+
+If Docker is unavailable, engineers can temporarily use a local
+Python environment instead:
+
+`terraform apply -var="use_docker_build=false"`
+
+Docker builds use the AWS Lambda runtime container:
+
+public.ecr.aws/lambda/python:3.10
+
+This ensures dependencies are built in an environment that matches AWS Lambda.
+
+Legacy step was executed by Terraform using:
+
+`python3 -m pip install -r requirements.txt -t .build/lambda_pkg`
+
+Because Python dependency resolution can vary between versions,
+the Python version used to build the Lambda package should match
+the Lambda runtime version.
+
+This prevents dependency conflicts and ensures the deployed
+package behaves the same in AWS as it does during packaging.
+
+If your system default python3 is a newer version (for example Python 3.12 or Python 3.13), the packaging step may fail with dependency resolution errors during:
+
+`terraform apply`
+
+Example error:
+
+`ERROR: Cannot install ... because these package versions have conflicting dependencies`
+
+To avoid this issue, ensure that the Lambda package is built using Python 3.10.
+
+Example:
+
+`python3.10 -m pip install -r requirements.txt -t .build/lambda_pkg`
+
+Your local development environment can still use newer Python versions (3.11+), but the Lambda packaging step should use the same version as the configured Lambda runtime.
+
+Note: 
+The Lambda runtime version is defined in lambda.tf. If the runtime is upgraded (for example to python3.11 or python3.12), the packaging Python version used in build.tf should be updated to match.
+
+See `docs/lambda_packaging.md` for full details on:
+
+- Lambda packaging architecture
+- dependency caching strategy
+- Docker-based builds
+- Terraform build triggers
+
+### AWS Region Alignment
+
+All components of the Bloodhound deployment must use the **same AWS region**.
+
+Terraform deploys the Lambda function to the region defined in the Terraform provider configuration.
+
+Example:
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+Any external systems invoking the Lambda must use the **same region**, including:
+
+- GitHub Actions workflows
+- AWS CLI commands
+- Manual testing scripts
+
+For example, the GitHub workflow must use:
+
+aws-region: us-east-1
+
+and:
+
+--region us-east-1
+
+If the regions do not match, the workflow will fail because AWS will not find the Lambda function.
+
+### Notes
+
+- Terraform invokes a build script (`scripts/build_lambda.sh`) to construct the Lambda package.
+- The build script requires `python3`, `pip`, `zip`, and `rsync` when using local builds.
+- If Docker mode is enabled, only Docker is required for dependency installation.
+- Putting secrets in `var.lambda_env` stores them in Terraform state. Prefer setting secrets in the Lambda console (or a secrets manager).
+
+## Environment Variables and Secrets
+
+Bloodhound uses different configuration sources for **local development** and **AWS runtime**.
+
+### Local Development
+
+When running locally, configuration is loaded from the `.env` file:
+
+.env
+
+Example usage:
+
+```bash
+python -m tools.run_local
+```
+
+The .env file is only used for local development and should never be committed to Git.
+
+AWS Runtime Configuration
+
+When deployed to AWS Lambda, Bloodhound does not use `.env`.
+
+Instead, configuration is provided through Lambda environment variables.
+
+After Terraform creates the Lambda function, configure secrets in the AWS console:
+
+AWS Console
+→ Lambda
+→ BloodhoundLambdaV2
+→ Configuration
+→ Environment Variables
+
+Add the following values:
+
+SLACK_BOT_TOKEN
+SLACK_SIGNING_SECRET
+SLACK_SCAN_CHANNEL_ID
+SLACK_ALERT_CHANNEL_ID
+
+The application reads these values at runtime using:
+
+`os.getenv("VARIABLE_NAME")`
+
+This works both locally (.env) and in AWS (Lambda environment variables).
+
+Terraform-Managed Variables
+
+Terraform may manage non-secret configuration variables, such as:
+
+REGION_MODE
+REGIONS
+APPLY_CHANGES
+TEARDOWN_SIMULATE
+TEARDOWN_ALLOW_ALL
+COHORT_START_YYYY_MM
+COHORT_TOTAL_BUDGET_USD
+lambda_alias_version_override
+
+lambda_alias_version_override allows temporarily pinning the production alias to a specific Lambda version for rollback.
+
+These values can safely live in:
+
+terraform.tfvars
+
+Terraform will inject them into the Lambda environment during deployment.
+
+Secrets Policy
+
+Secrets must not be stored in Terraform variables because they would be written into the Terraform state file.
+
+This includes:
+
+SLACK_BOT_TOKEN
+SLACK_SIGNING_SECRET
+SLACK_SCAN_CHANNEL_ID
+SLACK_ALERT_CHANNEL_ID
+
+Instead, secrets should be configured directly in the Lambda environment variables after deployment.
+
+This prevents secrets from appearing in:
+
+Git repositories
+
+Terraform configuration files
+
+Terraform state
+
+## Lambda Versioning and Alias
+
+Bloodhound uses **Lambda version publishing with a production alias** to enable safer deployments and easy rollback.
+
+Each time Terraform deploys the Lambda function, AWS publishes a **new immutable version** of the function.
+
+Example structure in AWS:
+
+
+BloodhoundLambdaV2
+├─ $LATEST
+├─ Version 1
+├─ Version 2
+└─ Version 3
+↑
+alias: prod
+
+
+Terraform automatically moves the `prod` alias to the newest published version during each deploy.
+
+### Deployment Behavior
+
+The deployment process works as follows:
+
+
+terraform plan
+↓
+preview infrastructure changes
+
+terraform apply
+↓
+publish new Lambda version
+↓
+update prod alias → newest version
+
+
+The `publish = true` setting in `lambda.tf` ensures that every code change results in a new version being created.
+
+The alias defined in `alias.tf` ensures that the production entry point always points to the most recently deployed version.
+
+### Why This Is Used
+
+Using Lambda versioning provides several operational benefits:
+
+- **Immutable deployments** – each version represents a fixed snapshot of the code
+- **Safe rollbacks** – the alias can be repointed to a previous version if a deployment fails
+- **Deployment history** – all previous Lambda versions remain available for debugging
+
+### Rollback Example
+
+If a deployment introduces an issue, the production alias can be moved back to a previous version.
+
+Example:
+
+prod → Version 2
+
+This immediately restores the previous working deployment without needing to redeploy code.
+
+### Slack Integration
+
+Slack continues to call the same **Lambda Function URL**.
+
+Internally AWS routes the request to the alias:
+
+Slack
+↓
+Lambda Function URL
+↓
+BloodhoundLambdaV2:prod
+↓
+Active Lambda version
+
+Because of this, deployments and rollbacks do **not require changing the Slack configuration**.
+
+### Viewing Lambda Versions
+
+Lambda versions can be viewed in the AWS console.
+
+Navigate to:
+
+AWS Console  
+→ Lambda  
+→ BloodhoundLambdaV2  
+→ Versions
+
+You will see a list similar to:
+
+$LATEST
+Version 1
+Version 2
+Version 3
+
+The production alias will indicate which version is currently active:
+
+prod → Version 3
+
+---
+
+### Performing a Rollback
+
+If a deployment introduces an issue, the production alias can be moved back to a previous version.
+
+Navigate to:
+
+AWS Console  
+→ Lambda  
+→ BloodhoundLambdaV2  
+→ Aliases  
+→ prod  
+→ Edit
+
+Then change the alias target to the previous version.
+
+Example:
+
+prod → Version 2
+
+This immediately restores the previous working deployment without redeploying code.
+
+---
+
+### Important: Terraform Deploy Behavior
+
+Terraform automatically moves the `prod` alias to the **latest published version** during each deployment.
+
+Example deploy:
+
+terraform apply
+↓
+publish Version 4
+↓
+prod → Version 4
+
+
+Because of this behavior, a manual rollback performed in the AWS console is **temporary**.
+
+Running `terraform apply` again will move the alias back to the newest deployed version.
+
+If a rollback must remain active, the underlying issue should be fixed before the next Terraform deployment
+------
+
+### Permanent Rollback Using Terraform
+
+Because Terraform manages the Lambda alias, a rollback performed in the AWS console is temporary.
+
+To make a rollback permanent, Terraform provides a **version override variable** that allows the production alias to be pinned to a specific version.
+
+This avoids editing infrastructure code during incidents.
+
+---
+
+### Step 1: Identify the Working Version
+
+Find the version to roll back to in the AWS console:
+
+AWS Console  
+→ Lambda  
+→ BloodhoundLambdaV2  
+→ Versions
+
+Example:
+
+$LATEST  
+Version 1  
+Version 2  
+Version 3
+
+---
+
+### Step 2: Apply Rollback Using Terraform
+
+Use the override variable when running Terraform:
+
+Syntax:
+```bash
+terraform apply -var="lambda_alias_version_override=<version_numb>"
+```
+
+Example:
+```bash
+terraform apply -var="lambda_alias_version_override=2"
+```
+
+Result:
+
+prod → Version 2
+
+The production alias will now permanently point to that version.
+
+Step 3: Restore Normal Deploy Behavior
+
+Once the issue is resolved, remove the override:
+
+```bash
+terraform apply -var="lambda_alias_version_override=null"
+```
+
+After this, Terraform deployments will again move the prod alias to the newest published version automatically.
+
+## Destructive Mode Deployment Guard
+
+Bloodhound includes a Terraform safety guard that prevents
+deployments when destructive mode is enabled.
+
+If the Lambda environment variable:
+
+APPLY_CHANGES=true
+
+Terraform will refuse to deploy unless the engineer explicitly
+acknowledges the action using the override variable.
+
+This guard prevents accidental deployments where Bloodhound
+would be allowed to delete infrastructure.
+
+Example error:
+
+Deployment blocked: APPLY_CHANGES=true requires -var allow_apply_mode=true
+
+To intentionally deploy with destructive mode enabled:
+
+terraform apply -var allow_apply_mode=true
+
+This guard exists to prevent accidental deployments that could
+allow Bloodhound to delete infrastructure.
+
+Normal deployments should run with:
+
+APPLY_CHANGES=false

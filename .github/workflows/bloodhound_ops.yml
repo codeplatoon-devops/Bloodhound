@@ -1,0 +1,343 @@
+name: Bloodhound Operations
+run-name: Bloodhound Operations — ${{ github.event.inputs.mode }}
+
+# ------------------------------------------------------------
+# Manual Bloodhound operations workflow
+#
+# This workflow lets an operator manually run Bloodhound
+# tasks from the GitHub Actions UI.
+#
+# Available operations:
+#   scan        → run infrastructure scan immediately
+#   validation  → check configuration
+#   status      → quick system health check
+#   validate_scheduler  → simulate scheduled EventBridge execution (debug only)
+#
+# NOTE:
+# validate_scheduler is a controlled validation mode used to
+# test the scheduled Lambda execution path without relying
+# on cron or EventBridge triggers.
+# ------------------------------------------------------------
+
+permissions:
+  id-token: write
+  contents: read
+
+
+# ------------------------------------------------------------
+# Concurrency Guard
+#
+# Prevents multiple Bloodhound scans running at the same time.
+#
+# Example:
+# scheduled scan running
+# operator triggers manual scan
+#
+# → GitHub will queue the second run instead of running both.
+# ------------------------------------------------------------
+concurrency:
+  group: bloodhound-scan
+  cancel-in-progress: false
+
+
+on:
+
+  # -------------------------------------------------------
+  # Manual trigger from GitHub Actions UI
+  # -------------------------------------------------------
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Bloodhound operation"
+        required: true
+        default: "status"
+        type: choice
+        options:
+          - scan
+          # -------------------------------------------------------
+          # NOTE:
+          # Validation workflow is temporarily disabled in CI.
+          #
+          # The validation pipeline provisions disposable Terraform
+          # infrastructure and performs controlled teardown tests.
+          #
+          # This workflow currently runs correctly in local
+          # environments but requires additional CI hardening
+          # (Terraform variable injection and account guard handling).
+          #
+          # The implementation remains in this workflow and will be
+          # re-enabled prior to GA once the CI validation pipeline
+          # is fully stabilized.
+          #
+          # To re-enable:
+          #   simply add "validation" back to the options list.
+          # -------------------------------------------------------
+          #- validation
+          - status
+          # -------------------------------------------------------
+          # Scheduler Validation Mode
+          #
+          # validate_scheduler simulates an EventBridge scheduled
+          # invocation using:
+          #   { "source": "scheduled" }
+          #
+          # This is used to validate the scheduled execution path
+          # before changes are promoted to main.
+          #
+          # This is NOT the production scheduler.
+          #
+          # The real scheduler is defined in:
+          #   invoke_lambda.yml
+          # -------------------------------------------------------
+          - validate_scheduler
+
+
+jobs:
+
+  invoke-lambda:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # -------------------------------------------------------
+      # Pull repository contents
+      # -------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # -------------------------------------------------------
+      # Authenticate to AWS using GitHub OIDC
+      #
+      # This assumes the IAM role configured for GitHub
+      # so the workflow can invoke the Lambda securely.
+      # -------------------------------------------------------
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: arn:aws:iam::388691194728:role/BloodhoundGitHubInvokeRole
+          aws-region: us-west-2
+
+      # Install Terraform for validation workflow
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+
+      # -------------------------------------------------------
+      # Invoke Bloodhound Lambda
+      #
+      # The selected operation from the UI is passed into
+      # the Lambda payload as JSON.
+      #
+      # For standard operations:
+      #
+      #   scan   → { "source": "scan" }
+      #   status → { "source": "status" }
+      #
+      # Validation requires additional guard fields because
+      # the validation handler enforces strict safety checks.
+      #
+      #   validation →
+      #   {
+      #     "source": "validation",
+      #     "mode": "seek_destroy_validation",
+      #     "target_ids": ["validation-instance"]
+      #   }
+      #
+      # -------------------------------------------------------
+      - name: Invoke Bloodhound Lambda operation
+        run: |
+            # fail fast on script errors
+            set -euo pipefail
+
+            echo "::group::Bloodhound Lambda Invocation"
+
+            # operation selected in UI
+            MODE="${{ github.event.inputs.mode }}"
+
+            echo ""
+            echo "========================================"
+            echo "Bloodhound Operation: $MODE"
+            echo "========================================"
+            echo ""
+
+            # -------------------------------------------------------
+            # Validation Mode
+            #
+            # Run the full teardown validation workflow instead of
+            # manually constructing a Lambda payload.
+            #
+            # The validation script handles:
+            #   • Terraform test instance creation
+            #   • Lambda invocation
+            #   • teardown verification
+            #   • safety checks
+            # -------------------------------------------------------
+            if [ "$MODE" = "validation" ]; then
+
+            echo "Running full teardown validation workflow"
+
+            chmod +x tools/run_validation_workflow.sh
+            ./tools/run_validation_workflow.sh
+
+            exit 0
+
+            fi
+
+
+            # -------------------------------------------------------
+            # Standard Lambda operations (scan / status) + scheduler validation
+            # -------------------------------------------------------
+            # validate_scheduler simulates EventBridge scheduled trigger
+            if [ "$MODE" = "validate_scheduler" ]; then
+              echo "===== VALIDATING SCHEDULER PATH ====="
+              echo "Simulating EventBridge scheduled event"
+              echo '{"source":"scheduled"}' > event.json
+            else
+              echo "{\"source\":\"$MODE\"}" > event.json
+            fi
+
+            # show payload being sent to Lambda
+            cat event.json
+            
+            echo ""
+            echo "Invoking Bloodhound Lambda"
+
+            # invoke Lambda
+            aws lambda invoke \
+                --function-name BloodhoundLambdaV2 \
+                --cli-binary-format raw-in-base64-out \
+                --payload file://event.json \
+                --log-type Tail \
+                output.json \
+                --region us-west-2 \
+                > lambda_meta.json
+                
+            echo "::endgroup::" 
+
+
+            # -------------------------------------------------------
+            # Print Lambda response payload
+            # -------------------------------------------------------
+            echo "::group::Lambda Response Payload"
+            cat output.json
+            echo "::endgroup::"
+
+
+            # -------------------------------------------------------
+            # Print Bloodhound operational summary results returned from Lambda
+            # -------------------------------------------------------
+            echo "::group::Bloodhound Summary"
+
+            echo "Scan Summary:"
+            jq '.scan' output.json || true
+
+            echo ""
+            echo "Budget Snapshot:"
+            jq '.budget' output.json || true
+
+            echo ""
+            echo "Teardown Plan:"
+            jq '.teardown' output.json || true
+
+            echo "::endgroup::"
+
+
+            # -------------------------------------------------------
+            # AWS invocation metadata
+            #
+            # Shows request ID, status code, and other
+            # Lambda invocation information.
+            # -------------------------------------------------------
+            echo "::group::Lambda Invocation Metadata"
+            cat lambda_meta.json
+            echo "::endgroup::"
+
+
+            # -------------------------------------------------------
+            # Decode Lambda logs returned in the invocation
+            #
+            # AWS embeds the last ~4KB of logs in base64.
+            # -------------------------------------------------------
+            echo "::group::Decoded Lambda Logs"
+
+            if jq -e '.LogResult' lambda_meta.json > /dev/null; then
+                cat lambda_meta.json | jq -r '.LogResult' | base64 -d
+            else
+                echo "No embedded logs returned from Lambda."
+            fi
+
+            echo "::endgroup::"
+
+
+            # -------------------------------------------------------
+            # Detect Lambda failures
+            #
+            # Ensures CI fails if Lambda execution fails.
+            # -------------------------------------------------------
+            echo "::group::Lambda Error Check"
+
+            if grep -q "FunctionError" lambda_meta.json; then
+                echo "ERROR: Lambda reported FunctionError"
+                exit 1
+            fi
+
+            if ! grep -q '"StatusCode": 200' lambda_meta.json; then
+                echo "ERROR: Lambda invocation returned non-200 status"
+                exit 1
+            fi
+
+            echo "Lambda invocation completed successfully"
+
+            echo "::endgroup::"
+
+
+      # -------------------------------------------------------
+      # Pull recent logs from CloudWatch
+      # -------------------------------------------------------
+      - name: Fetch Lambda Logs
+        run: |
+
+          echo "::group::Lambda CloudWatch Logs"
+
+          LOG_GROUP="/aws/lambda/BloodhoundLambdaV2"
+
+          # find most recent log stream
+          LOG_STREAM=$(aws logs describe-log-streams \
+            --log-group-name $LOG_GROUP \
+            --order-by LastEventTime \
+            --descending \
+            --limit 1 \
+            --query 'logStreams[0].logStreamName' \
+            --output text)
+
+          echo "Latest log stream:"
+          echo $LOG_STREAM
+
+          echo ""
+          echo "Recent log events:"
+
+          aws logs get-log-events \
+            --log-group-name $LOG_GROUP \
+            --log-stream-name $LOG_STREAM \
+            --limit 50 \
+            --query 'events[*].message' \
+            --output text
+
+          echo "::endgroup::"
+
+      # -------------------------------------------------------
+      # Upload validation logs
+      #
+      # If validation mode ran, upload the generated
+      # validation logs as CI artifacts so engineers
+      # can download them from the workflow run page.
+      # -------------------------------------------------------
+      - name: Upload validation logs
+        if: always() && github.event.inputs.mode == 'validation'
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-logs
+          path: logs/validation
